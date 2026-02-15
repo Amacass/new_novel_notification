@@ -1,0 +1,58 @@
+name: novel_notification
+description: "Web小説更新通知アプリ"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # Supabase
+  supabase_flutter: ^2.0.0
+
+  # State Management
+  flutter_riverpod: ^2.6.0
+  riverpod_annotation: ^2.6.0
+
+  # Routing
+  go_router: ^14.0.0
+
+  # Theme
+  flex_color_scheme: ^8.0.0
+
+  # Local Storage
+  shared_preferences: ^2.3.0
+
+  # HTTP
+  dio: ^5.7.0
+
+  # URL Launcher
+  url_launcher: ^6.3.0
+
+  # Environment Variables
+  flutter_dotenv: ^5.2.1
+
+  # Utilities
+  intl: ^0.20.0
+  timeago: ^3.7.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+  # Code Generation
+  build_runner: ^2.4.0
+  json_serializable: ^6.9.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - .env
