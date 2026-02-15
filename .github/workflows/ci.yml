@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  flutter-check:
+    name: Flutter Analyze & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Create .env
+        run: |
+          echo "SUPABASE_URL=https://placeholder.supabase.co" > .env
+          echo "SUPABASE_ANON_KEY=placeholder" >> .env
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+  deno-check:
+    name: Deno Lint & Type Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: supabase
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Lint
+        run: deno lint functions/
+
+      - name: Type check
+        run: >
+          deno check
+          functions/parse-novel-url/index.ts
+          functions/register-bookmark/index.ts
+          functions/crawl-updates/index.ts
+          functions/check-new-novels/index.ts
+          functions/check-legal-updates/index.ts
+          functions/record-consent/index.ts
