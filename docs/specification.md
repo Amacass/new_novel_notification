@@ -1,6 +1,7 @@
 # Web小説更新通知アプリ 仕様書
 
 > 本ドキュメントは `docs/requirements.md` の要件定義に基づく技術仕様書である。
+> UX実装時は `docs/ux_psychology.md` のUX心理学適用ガイドを必ず参照すること。
 
 ---
 

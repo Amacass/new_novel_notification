@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../config/theme.dart';
 import '../../providers/bookmark_provider.dart';
+import '../../providers/charm_tag_provider.dart';
 import '../../providers/novel_provider.dart';
+import '../../providers/stamp_provider.dart';
 import '../../widgets/rating_stars.dart';
 import '../../widgets/site_badge.dart';
+import '../../widgets/tier_badge.dart';
+import '../stamp/promo_card_screen.dart';
+import '../stamp/stamp_sheet.dart';
 
 class NovelDetailScreen extends ConsumerStatefulWidget {
   final int novelId;
@@ -22,6 +28,10 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
     final novelAsync = ref.watch(novelDetailProvider(widget.novelId));
     final reviewAsync = ref.watch(novelReviewProvider(widget.novelId));
     final bookmarks = ref.watch(bookmarkListProvider);
+    final stampsAsync = ref.watch(novelStampsProvider(widget.novelId));
+    final tagsAsync = ref.watch(novelTagsProvider(widget.novelId));
+    final userStampCount = ref.watch(userStampCountProvider);
+    final userTagCount = ref.watch(userTagCountProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -37,6 +47,10 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
               ?.where((b) => b.novelId == widget.novelId)
               .firstOrNull;
           final review = reviewAsync.valueOrNull;
+          final stamps = stampsAsync.valueOrNull ?? [];
+          final tags = tagsAsync.valueOrNull ?? [];
+          final stampCount = userStampCount.valueOrNull ?? 0;
+          final tagCount = userTagCount.valueOrNull ?? 0;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -82,10 +96,138 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
                     Chip(label: Text(novel.serialStatus.displayName)),
                     const SizedBox(width: 8),
                     Text('全${novel.totalEpisodes}話'),
+                    const Spacer(),
+                    // Tier badge
+                    if (bookmark != null && bookmark.tier >= 0) ...[
+                      TierBadge(tier: bookmark.tier, size: 28),
+                      const SizedBox(width: 4),
+                      Text(
+                        DeskTheme.tierLabel(bookmark.tier),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
                   ],
                 ),
 
                 const Divider(height: 32),
+
+                // Stamp button
+                if (bookmark != null) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      icon: const Text('📝', style: TextStyle(fontSize: 18)),
+                      label: const Text('スタンプを押す'),
+                      onPressed: () => StampSheet.show(
+                        context,
+                        novelId: widget.novelId,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Stamp history
+                if (stamps.isNotEmpty) ...[
+                  _SectionTitle(title: 'スタンプ履歴'),
+                  SizedBox(
+                    height: 60,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: stamps.length,
+                      itemBuilder: (context, index) {
+                        final stamp = stamps[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: Column(
+                            children: [
+                              Text(
+                                stamp.emoji,
+                                style: const TextStyle(fontSize: 28),
+                              ),
+                              Text(
+                                _formatDate(stamp.createdAt),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Tags section
+                if (tags.isNotEmpty) ...[
+                  _SectionTitle(title: '魅力タグ'),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: tags.map((tag) {
+                      return Chip(
+                        label: Text(tag.name,
+                            style: const TextStyle(fontSize: 12)),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Progressive disclosure: suggest tags after 3+ stamps
+                if (stamps.isNotEmpty &&
+                    stamps.length >= 3 &&
+                    stampCount >= 3 &&
+                    tags.isEmpty) ...[
+                  Card(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primaryContainer
+                        .withValues(alpha: 0.3),
+                    child: ListTile(
+                      leading: const Text('🏷️', style: TextStyle(fontSize: 24)),
+                      title: const Text('魅力タグを付けてみませんか？'),
+                      subtitle: const Text('この作品の魅力を記録しましょう'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        // Open tag sheet for the latest stamp
+                        // TagSheet.show(context, stampId: stamps.first.id, novelId: widget.novelId);
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Promo card button (progressive disclosure: 5+ tags)
+                if (tagCount >= 5 && bookmark != null) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.tonalIcon(
+                      icon: const Text('📣', style: TextStyle(fontSize: 16)),
+                      label: const Text('布教カードを作る'),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                PromoCardScreen(bookmark: bookmark),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
 
                 // Bookmark info (reading progress)
                 if (bookmark != null) ...[
@@ -99,8 +241,10 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
                           : const Text('最新話まで読了'),
                       trailing: IconButton(
                         icon: const Icon(Icons.edit),
-                        onPressed: () =>
-                            _showEpisodeDialog(bookmark.id, bookmark.lastReadEpisode, novel.totalEpisodes),
+                        onPressed: () => _showEpisodeDialog(
+                            bookmark.id,
+                            bookmark.lastReadEpisode,
+                            novel.totalEpisodes),
                       ),
                     ),
                   ),
@@ -203,6 +347,10 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
         error: (error, _) => Center(child: Text('エラー: $error')),
       ),
     );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.month}/${date.day}';
   }
 
   Future<void> _openUrl(String url) async {

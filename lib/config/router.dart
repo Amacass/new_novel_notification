@@ -6,23 +6,18 @@ import '../providers/auth_provider.dart';
 import '../screens/splash/splash_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
-import '../screens/home/home_screen.dart';
-import '../screens/bookmarks/bookmark_list_screen.dart';
+import '../screens/desk/desk_screen.dart';
+import '../screens/bookshelf/bookshelf_screen.dart';
 import '../screens/novel_detail/novel_detail_screen.dart';
 import '../screens/authors/favorite_authors_screen.dart';
 import '../screens/notifications/notification_list_screen.dart';
 import '../screens/settings/settings_screen.dart';
 
-final _rootNavigatorKey = GlobalKey<NavigatorState>();
-final _shellNavigatorKey = GlobalKey<NavigatorState>();
-
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateProvider);
-
-  return GoRouter(
-    navigatorKey: _rootNavigatorKey,
+  final router = GoRouter(
     initialLocation: '/',
     redirect: (context, state) {
+      final authState = ref.read(authStateProvider);
       final isLoggedIn = authState.value != null;
       final isAuthRoute = state.matchedLocation == '/login' ||
           state.matchedLocation == '/register';
@@ -47,16 +42,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const RegisterScreen(),
       ),
       ShellRoute(
-        navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) => MainShell(child: child),
         routes: [
           GoRoute(
             path: '/home',
-            builder: (context, state) => const HomeScreen(),
+            builder: (context, state) => const DeskScreen(),
           ),
           GoRoute(
-            path: '/bookmarks',
-            builder: (context, state) => const BookmarkListScreen(),
+            path: '/bookshelf',
+            builder: (context, state) => BookshelfScreen(
+              initialTier: int.tryParse(
+                state.uri.queryParameters['tier'] ?? '',
+              ),
+            ),
           ),
           GoRoute(
             path: '/authors',
@@ -70,7 +68,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/novel/:id',
-        parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
           final id = state.pathParameters['id']!;
           return NovelDetailScreen(novelId: int.parse(id));
@@ -78,11 +75,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/notifications',
-        parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const NotificationListScreen(),
       ),
     ],
   );
+
+  // Listen for auth changes and refresh router
+  ref.listen(authStateProvider, (prev, next) {
+    router.refresh();
+  });
+
+  return router;
 });
 
 class MainShell extends StatelessWidget {
@@ -93,7 +96,7 @@ class MainShell extends StatelessWidget {
   static int _calculateSelectedIndex(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
     if (location.startsWith('/home')) return 0;
-    if (location.startsWith('/bookmarks')) return 1;
+    if (location.startsWith('/bookshelf')) return 1;
     if (location.startsWith('/authors')) return 2;
     if (location.startsWith('/settings')) return 3;
     return 0;
@@ -110,7 +113,7 @@ class MainShell extends StatelessWidget {
             case 0:
               context.go('/home');
             case 1:
-              context.go('/bookmarks');
+              context.go('/bookshelf');
             case 2:
               context.go('/authors');
             case 3:
@@ -119,14 +122,14 @@ class MainShell extends StatelessWidget {
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'ホーム',
+            icon: Icon(Icons.inbox_outlined),
+            selectedIcon: Icon(Icons.inbox),
+            label: 'デスク',
           ),
           NavigationDestination(
-            icon: Icon(Icons.bookmark_outline),
-            selectedIcon: Icon(Icons.bookmark),
-            label: 'ブックマーク',
+            icon: Icon(Icons.library_books_outlined),
+            selectedIcon: Icon(Icons.library_books),
+            label: '本棚',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),

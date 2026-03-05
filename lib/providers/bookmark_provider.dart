@@ -20,12 +20,44 @@ class BookmarkListNotifier extends AsyncNotifier<List<Bookmark>> {
 
     final response = await supabase
         .from('bookmarks')
-        .select('*, novels(*), reviews(*)')
+        .select('*, novels(*)')
         .eq('user_id', userId)
         .order('created_at', ascending: false);
 
-    return (response as List)
-        .map((json) => Bookmark.fromJson(json as Map<String, dynamic>))
+    final bookmarks = (response as List)
+        .map((json) => json as Map<String, dynamic>)
+        .toList();
+
+    // Fetch reviews separately (no direct FK between bookmarks and reviews)
+    if (bookmarks.isNotEmpty) {
+      final novelIds = bookmarks
+          .map((b) => b['novel_id'] as int)
+          .toSet()
+          .toList();
+
+      final reviewsResponse = await supabase
+          .from('reviews')
+          .select('*')
+          .eq('user_id', userId)
+          .inFilter('novel_id', novelIds);
+
+      final reviewsByNovelId = <int, Map<String, dynamic>>{};
+      for (final r in reviewsResponse as List) {
+        final review = r as Map<String, dynamic>;
+        reviewsByNovelId[review['novel_id'] as int] = review;
+      }
+
+      // Attach reviews to bookmark JSON
+      for (final b in bookmarks) {
+        final novelId = b['novel_id'] as int;
+        if (reviewsByNovelId.containsKey(novelId)) {
+          b['reviews'] = reviewsByNovelId[novelId];
+        }
+      }
+    }
+
+    return bookmarks
+        .map((json) => Bookmark.fromJson(json))
         .toList();
   }
 
@@ -39,6 +71,20 @@ class BookmarkListNotifier extends AsyncNotifier<List<Bookmark>> {
   }) async {
     final userId = supabase.auth.currentUser?.id;
     if (userId == null) return;
+
+    // Check if bookmark already exists for this novel
+    final existing = await supabase
+        .from('bookmarks')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('novel_id', novelId)
+        .maybeSingle();
+
+    if (existing != null) {
+      // Already bookmarked - just refresh to ensure local state is current
+      await refresh();
+      return;
+    }
 
     await supabase.from('bookmarks').insert({
       'user_id': userId,
@@ -66,6 +112,38 @@ class BookmarkListNotifier extends AsyncNotifier<List<Bookmark>> {
     await supabase.from('bookmarks').update({
       'memo': memo,
       'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', bookmarkId);
+
+    await refresh();
+  }
+
+  Future<void> updateTier(int bookmarkId, int tier) async {
+    await supabase.from('bookmarks').update({
+      'tier': tier,
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', bookmarkId);
+
+    await refresh();
+  }
+
+  Future<void> updateHeatScore(int bookmarkId, double score) async {
+    await supabase.from('bookmarks').update({
+      'heat_score': score,
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', bookmarkId);
+
+    // Update local state without full refresh
+    state = state.whenData((bookmarks) => bookmarks.map((b) {
+          if (b.id == bookmarkId) return b.copyWith(heatScore: score);
+          return b;
+        }).toList());
+  }
+
+  Future<void> updateLastStampedAt(int bookmarkId) async {
+    final now = DateTime.now().toIso8601String();
+    await supabase.from('bookmarks').update({
+      'last_stamped_at': now,
+      'updated_at': now,
     }).eq('id', bookmarkId);
 
     await refresh();

@@ -6,6 +6,9 @@ class Bookmark {
   final int novelId;
   final int lastReadEpisode;
   final String? memo;
+  final int tier; // -1=未仕分け, 0=ゴミ箱, 1=キープ, 2=良作, 3=殿堂入り
+  final double heatScore;
+  final DateTime? lastStampedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
   final Novel? novel;
@@ -17,6 +20,9 @@ class Bookmark {
     required this.novelId,
     this.lastReadEpisode = 0,
     this.memo,
+    this.tier = -1,
+    this.heatScore = 0.0,
+    this.lastStampedAt,
     required this.createdAt,
     required this.updatedAt,
     this.novel,
@@ -35,6 +41,11 @@ class Bookmark {
       novelId: json['novel_id'] as int,
       lastReadEpisode: json['last_read_episode'] as int? ?? 0,
       memo: json['memo'] as String?,
+      tier: json['tier'] as int? ?? -1,
+      heatScore: (json['heat_score'] as num?)?.toDouble() ?? 0.0,
+      lastStampedAt: json['last_stamped_at'] != null
+          ? DateTime.parse(json['last_stamped_at'] as String)
+          : null,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
       novel: json['novels'] != null
@@ -43,6 +54,36 @@ class Bookmark {
       review: json['reviews'] != null
           ? Review.fromJson(json['reviews'] as Map<String, dynamic>)
           : null,
+    );
+  }
+
+  Bookmark copyWith({
+    int? id,
+    String? userId,
+    int? novelId,
+    int? lastReadEpisode,
+    String? memo,
+    int? tier,
+    double? heatScore,
+    DateTime? lastStampedAt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    Novel? novel,
+    Review? review,
+  }) {
+    return Bookmark(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      novelId: novelId ?? this.novelId,
+      lastReadEpisode: lastReadEpisode ?? this.lastReadEpisode,
+      memo: memo ?? this.memo,
+      tier: tier ?? this.tier,
+      heatScore: heatScore ?? this.heatScore,
+      lastStampedAt: lastStampedAt ?? this.lastStampedAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      novel: novel ?? this.novel,
+      review: review ?? this.review,
     );
   }
 }

@@ -41,6 +41,9 @@ dependencies:
   intl: ^0.20.0
   timeago: ^3.7.0
 
+  # Share
+  share_plus: ^10.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
