@@ -137,6 +137,7 @@ async function processNarou(client: any, novels: any[]): Promise<number> {
           .upsert(newEpisodes, { onConflict: "novel_id,site_episode_id" });
       }
 
+      novel.title = data.title;
       await notifyUsers(client, novel, data.totalEpisodes);
       updatedCount++;
     }
@@ -193,6 +194,7 @@ async function processHameln(client: any, novels: any[]): Promise<number> {
             .upsert(episodeRecords, { onConflict: "novel_id,site_episode_id" });
         }
 
+        novel.title = data.title;
         await notifyUsers(client, novel, data.totalEpisodes);
         updatedCount++;
       }
@@ -254,6 +256,7 @@ async function processArcadia(client: any, novels: any[]): Promise<number> {
             .upsert(episodeRecords, { onConflict: "novel_id,site_episode_id" });
         }
 
+        novel.title = data.title;
         await notifyUsers(client, novel, data.totalEpisodes);
         updatedCount++;
       }

@@ -44,24 +44,21 @@ export async function fetchHamelnNovel(
 }
 
 function parseHamelnToc(html: string): HamelnNovelData | null {
-  // Extract title
-  const titleMatch = html.match(
-    /<span style="font-size:120%"><b>(.+?)<\/b><\/span>/,
-  );
+  // Extract title: <span style="font-size:150%" itemprop="name">タイトル</span>
+  const titleMatch = html.match(/<span[^>]*itemprop="name"[^>]*>(.+?)<\/span>/);
   const title = titleMatch
     ? decodeHtmlEntities(titleMatch[1])
     : "不明なタイトル";
 
-  // Extract author
-  const authorMatch = html.match(/作者：<a[^>]*>(.+?)<\/a>/);
+  // Extract author: 作者：<span itemprop="author"><a href="...">author</a></span>
+  const authorMatch = html.match(/itemprop="author"[^>]*><a[^>]*>(.+?)<\/a>/);
   const author = authorMatch
     ? decodeHtmlEntities(authorMatch[1])
     : "不明な作者";
 
-  // Extract episode links
-  // Hameln TOC uses patterns like: <a href="/novel/{id}/{num}.html">title</a>
-  const episodeRegex =
-    /<a\s+href="\/novel\/\d+\/(\d+)\.html"[^>]*>(.+?)<\/a>/g;
+  // Extract episode links: <a href=./N.html style="text-decoration:none;">title</a>
+  // Note: href is unquoted relative URL (./1.html, ./2.html, ...)
+  const episodeRegex = /<a\s+href=\.\/(\d+)\.html[^>]*>([^<]+)<\/a>/g;
   const episodes: { id: string; title: string }[] = [];
   let match;
 
