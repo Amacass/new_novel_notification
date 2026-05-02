@@ -7,11 +7,13 @@ import '../widgets/tier_badge.dart';
 class BookshelfCard extends StatelessWidget {
   final Bookmark bookmark;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
   const BookshelfCard({
     super.key,
     required this.bookmark,
     this.onTap,
+    this.onLongPress,
   });
 
   @override
@@ -23,6 +25,7 @@ class BookshelfCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(12),

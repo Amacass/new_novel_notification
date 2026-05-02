@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../models/bookmark.dart';
 import '../../providers/bookmark_provider.dart';
 import '../../widgets/bookshelf_card.dart';
+import '../../widgets/tier_change_sheet.dart';
 
 enum BookshelfSort { heatScore, updatedAt, title, createdAt }
 
@@ -187,6 +188,51 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
                         bookmark: bookmark,
                         onTap: () =>
                             context.push('/novel/${bookmark.novelId}'),
+                        onLongPress: () async {
+                          final result =
+                              await TierChangeSheet.showWithDelete(
+                            context,
+                            currentTier: bookmark.tier,
+                          );
+                          if (result == null) return;
+                          if (result.delete) {
+                            if (!context.mounted) return;
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('ブックマークを削除'),
+                                content: Text(
+                                  '「${bookmark.novel?.title ?? "この作品"}」を本棚から削除しますか？'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, false),
+                                    child: const Text('キャンセル'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, true),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: Theme.of(context)
+                                          .colorScheme
+                                          .error,
+                                    ),
+                                    child: const Text('削除'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirm == true) {
+                              ref
+                                  .read(bookmarkListProvider.notifier)
+                                  .removeBookmark(bookmark.id);
+                            }
+                          } else if (result.tier != null) {
+                            ref
+                                .read(bookmarkListProvider.notifier)
+                                .updateTier(bookmark.id, result.tier!);
+                          }
+                        },
                       );
                     },
                   ),

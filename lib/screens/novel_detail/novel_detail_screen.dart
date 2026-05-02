@@ -10,6 +10,7 @@ import '../../providers/stamp_provider.dart';
 import '../../widgets/rating_stars.dart';
 import '../../widgets/site_badge.dart';
 import '../../widgets/tier_badge.dart';
+import '../../widgets/tier_change_sheet.dart';
 import '../stamp/promo_card_screen.dart';
 import '../stamp/stamp_sheet.dart';
 
@@ -97,15 +98,46 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
                     const SizedBox(width: 8),
                     Text('全${novel.totalEpisodes}話'),
                     const Spacer(),
-                    // Tier badge
-                    if (bookmark != null && bookmark.tier >= 0) ...[
-                      TierBadge(tier: bookmark.tier, size: 28),
-                      const SizedBox(width: 4),
-                      Text(
-                        DeskTheme.tierLabel(bookmark.tier),
-                        style: Theme.of(context).textTheme.bodySmall,
+                    // Tier badge (tap to change)
+                    if (bookmark != null && bookmark.tier >= 0)
+                      InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () async {
+                          final newTier = await TierChangeSheet.show(
+                            context,
+                            currentTier: bookmark.tier,
+                          );
+                          if (newTier != null) {
+                            ref
+                                .read(bookmarkListProvider.notifier)
+                                .updateTier(bookmark.id, newTier);
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              TierBadge(tier: bookmark.tier, size: 28),
+                              const SizedBox(width: 4),
+                              Text(
+                                DeskTheme.tierLabel(bookmark.tier),
+                                style:
+                                    Theme.of(context).textTheme.bodySmall,
+                              ),
+                              const SizedBox(width: 2),
+                              Icon(
+                                Icons.edit_outlined,
+                                size: 14,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ],
                   ],
                 ),
 

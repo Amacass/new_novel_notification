@@ -6,6 +6,7 @@ import 'config/router.dart';
 import 'config/theme.dart';
 import 'providers/bookmark_provider.dart';
 import 'providers/novel_provider.dart';
+import 'providers/realtime_provider.dart';
 import 'providers/shared_url_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/triage_provider.dart';
@@ -25,6 +26,7 @@ class _AppState extends ConsumerState<App> {
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
     final router = ref.watch(routerProvider);
+    ref.watch(realtimeProvider);
 
     // Listen for shared URL and auto-register bookmark
     ref.listen<String?>(sharedUrlProvider, (prev, next) {

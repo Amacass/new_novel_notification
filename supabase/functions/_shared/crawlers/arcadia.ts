@@ -1,8 +1,15 @@
+export interface EpisodeInfo {
+  siteEpisodeId: string;
+  episodeNumber: number;
+  title?: string;
+}
+
 export interface ArcadiaNovelData {
   title: string;
   author: string;
   totalEpisodes: number;
   latestEpisodeId: string;
+  episodes: EpisodeInfo[];
 }
 
 /**
@@ -46,32 +53,62 @@ export async function fetchArcadiaNovel(
 }
 
 function parseArcadiaPage(html: string): ArcadiaNovelData | null {
-  // Extract title from page
-  const titleMatch = html.match(/<title>(.+?)<\/title>/i);
-  const title = titleMatch
-    ? decodeHtmlEntities(titleMatch[1]).replace(/ - Arcadia.*$/, "").trim()
+  // Extract title from the first entry [0] in the episode table.
+  // Each row: <td>[0]</td><td><a href="...">TITLE</a></td><td>[AUTHOR]</td><td>(DATE)</td>
+  const firstEntryMatch = html.match(
+    /\[0\]<\/td><td[^>]*><b>\s*\n?\s*<a[^>]+>(.+?)<\/a>/,
+  );
+  const title = firstEntryMatch
+    ? decodeHtmlEntities(firstEntryMatch[1]).trim()
     : "不明なタイトル";
 
-  // Extract author - Arcadia BBS format varies
-  const authorMatch = html.match(
-    /投稿者[：:][\s]*(?:<[^>]+>)*\s*([^<\n]+)/,
+  // Extract author from the Name field in the post body: "Name: すいか◆0ccb92c1 ID:..."
+  // Falls back to the bracket notation [作者名] in the episode table rows.
+  let author = "不明な作者";
+  const nameFieldMatch = html.match(
+    /<tt>Name:\s*([^◆<\n]+)/,
   );
-  const author = authorMatch
-    ? decodeHtmlEntities(authorMatch[1]).trim()
-    : "不明な作者";
-
-  // Count episodes/posts - look for numbered sections
-  // Arcadia uses various patterns depending on the story format
-  const partRegex = /No\.(\d+)/g;
-  const partNumbers: number[] = [];
-  let match;
-
-  while ((match = partRegex.exec(html)) !== null) {
-    partNumbers.push(parseInt(match[1]));
+  if (nameFieldMatch) {
+    author = decodeHtmlEntities(nameFieldMatch[1]).trim();
+  } else {
+    // Fallback: get author from the first table row's 3rd td: [author_name]
+    const authorBracketMatch = html.match(
+      /\[0\]<\/td><td[^>]*><b>\s*\n?\s*<a[^>]+>.+?<\/a><\/b><\/td><td[^>]*>\[([^\]]+)\]/,
+    );
+    if (authorBracketMatch) {
+      author = decodeHtmlEntities(authorBracketMatch[1]).trim();
+    }
   }
 
-  const totalEpisodes = partNumbers.length > 0
-    ? Math.max(...partNumbers)
+  // Extract episodes - Arcadia uses [number] pattern with optional title link
+  // Pattern: [number]</td><td...><b><a href="...">TITLE</a></b></td>
+  const episodeRegex = /\[(\d+)\]<\/td><td[^>]*><b>\s*\n?\s*<a[^>]+>(.+?)<\/a>/g;
+  const episodes: EpisodeInfo[] = [];
+  let match;
+
+  while ((match = episodeRegex.exec(html)) !== null) {
+    const num = parseInt(match[1]);
+    episodes.push({
+      siteEpisodeId: String(num),
+      episodeNumber: num,
+      title: decodeHtmlEntities(match[2]).trim(),
+    });
+  }
+
+  // Fallback: count by simple pattern if title extraction failed
+  if (episodes.length === 0) {
+    const simpleRegex = /\[(\d+)\]<\/td><td/g;
+    while ((match = simpleRegex.exec(html)) !== null) {
+      const num = parseInt(match[1]);
+      episodes.push({
+        siteEpisodeId: String(num),
+        episodeNumber: num,
+      });
+    }
+  }
+
+  const totalEpisodes = episodes.length > 0
+    ? Math.max(...episodes.map((e) => e.episodeNumber))
     : 1;
   const latestId = totalEpisodes.toString();
 
@@ -80,6 +117,7 @@ function parseArcadiaPage(html: string): ArcadiaNovelData | null {
     author,
     totalEpisodes,
     latestEpisodeId: latestId,
+    episodes,
   };
 }
 

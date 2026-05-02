@@ -1,9 +1,16 @@
+export interface EpisodeInfo {
+  siteEpisodeId: string;
+  episodeNumber: number;
+  title?: string;
+}
+
 export interface HamelnNovelData {
   title: string;
   author: string;
   totalEpisodes: number;
   latestEpisodeId: string;
   latestEpisodeTitle: string;
+  episodes: EpisodeInfo[];
 }
 
 /**
@@ -75,7 +82,55 @@ function parseHamelnToc(html: string): HamelnNovelData | null {
     totalEpisodes: episodes.length,
     latestEpisodeId: latest.id,
     latestEpisodeTitle: latest.title,
+    episodes: episodes.map((ep, idx) => ({
+      siteEpisodeId: ep.id,
+      episodeNumber: idx + 1,
+      title: ep.title,
+    })),
   };
+}
+
+/**
+ * ハーメルンの作者マイページから作品一覧を取得する
+ */
+export async function fetchHamelnNovelsByAuthor(
+  authorId: string,
+): Promise<{ novelId: string; title: string }[]> {
+  const url = `https://syosetu.org/user/${authorId}/`;
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "NovelNotificationApp/1.0 (Web Novel Update Checker)",
+        Accept: "text/html",
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`Hameln author page fetch failed: ${response.status} for ${authorId}`);
+      return [];
+    }
+
+    const html = await response.text();
+
+    // Extract novel links: <a href="/novel/{id}/">title</a>
+    const novelRegex = /<a\s+href="\/novel\/(\d+)\/"[^>]*>(.+?)<\/a>/g;
+    const novels: { novelId: string; title: string }[] = [];
+    let match;
+
+    while ((match = novelRegex.exec(html)) !== null) {
+      novels.push({
+        novelId: match[1],
+        title: decodeHtmlEntities(match[2]),
+      });
+    }
+
+    return novels;
+  } catch (err) {
+    console.error(`Hameln author page error for ${authorId}: ${err}`);
+    return [];
+  }
 }
 
 function decodeHtmlEntities(str: string): string {
