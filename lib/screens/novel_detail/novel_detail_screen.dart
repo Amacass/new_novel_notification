@@ -395,7 +395,7 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
   void _showEpisodeDialog(int bookmarkId, int current, int total) {
     final controller = TextEditingController(text: current.toString());
 
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('既読話数を更新'),
@@ -426,13 +426,13 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
           ),
         ],
       ),
-    );
+    ).then((_) => controller.dispose());
   }
 
   void _showCommentDialog(String? currentComment) {
     final controller = TextEditingController(text: currentComment);
 
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('感想を編集'),
@@ -464,13 +464,13 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
           ),
         ],
       ),
-    );
+    ).then((_) => controller.dispose());
   }
 
   void _showMemoDialog(int bookmarkId, String? currentMemo) {
     final controller = TextEditingController(text: currentMemo);
 
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('メモを編集'),
@@ -497,7 +497,7 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
           ),
         ],
       ),
-    );
+    ).then((_) => controller.dispose());
   }
 }
 

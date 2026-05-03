@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
+import '../legal/legal_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -86,17 +87,29 @@ class SettingsScreen extends ConsumerWidget {
             leading: const Icon(Icons.description_outlined),
             title: const Text('利用規約'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              // TODO: Open terms of service
-            },
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const LegalScreen(
+                  title: '利用規約',
+                  assetPath: 'docs/terms_of_service.md',
+                ),
+              ),
+            ),
           ),
           ListTile(
             leading: const Icon(Icons.privacy_tip_outlined),
             title: const Text('プライバシーポリシー'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              // TODO: Open privacy policy
-            },
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const LegalScreen(
+                  title: 'プライバシーポリシー',
+                  assetPath: 'docs/privacy_policy.md',
+                ),
+              ),
+            ),
           ),
           ListTile(
             leading: const Icon(Icons.info_outline),
@@ -114,7 +127,7 @@ class SettingsScreen extends ConsumerWidget {
 
           // Logout
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: OutlinedButton.icon(
               icon: const Icon(Icons.logout),
               label: const Text('ログアウト'),
@@ -147,10 +160,59 @@ class SettingsScreen extends ConsumerWidget {
               },
             ),
           ),
-          const SizedBox(height: 32),
+
+          // Delete account
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+            child: TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
+              onPressed: () => _confirmDeleteAccount(context, ref),
+              child: const Text('アカウントを削除する'),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDeleteAccount(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('アカウントを削除'),
+        content: const Text(
+          'アカウントを削除すると、ブックマーク・感想・設定など全てのデータが失われます。\n\nこの操作は取り消せません。本当に削除しますか？',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('削除する'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await ref.read(authRepositoryProvider).deleteAccount();
+      if (context.mounted) context.go('/login');
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('削除に失敗しました: $e')),
+        );
+      }
+    }
   }
 
   String _themeModeLabel(ThemeMode mode) {
