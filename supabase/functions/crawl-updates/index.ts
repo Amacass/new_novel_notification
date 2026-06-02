@@ -174,6 +174,7 @@ async function processHameln(client: any, novels: any[]): Promise<number> {
           total_episodes: data.totalEpisodes,
           latest_episode_id: data.latestEpisodeId,
           latest_episode_title: data.latestEpisodeTitle,
+          site_updated_at: data.latestUpdatedAt,
           last_crawled_at: new Date().toISOString(),
           crawl_error_count: 0,
           updated_at: new Date().toISOString(),
@@ -213,9 +214,17 @@ async function processHameln(client: any, novels: any[]): Promise<number> {
 
 // deno-lint-ignore no-explicit-any
 async function processArcadia(client: any, novels: any[]): Promise<number> {
+  // Limit Arcadia crawling to once per 24 hours per novel to reduce server load
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const novelsToCrawl = novels.filter(
+    (n) => !n.last_crawled_at || new Date(n.last_crawled_at) < cutoff,
+  );
+
+  if (novelsToCrawl.length === 0) return 0;
+
   let updatedCount = 0;
 
-  for (const novel of novels) {
+  for (const novel of novelsToCrawl) {
     const logStart = Date.now();
 
     try {

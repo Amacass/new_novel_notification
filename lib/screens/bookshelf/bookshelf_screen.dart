@@ -3,8 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/bookmark.dart';
+import '../../models/novel.dart';
 import '../../providers/bookmark_provider.dart';
+import '../../providers/stamp_provider.dart';
 import '../../widgets/bookshelf_card.dart';
+import '../../widgets/category_pick_sheet.dart';
+import '../../widgets/site_badge.dart';
 import '../../widgets/tier_change_sheet.dart';
 
 enum BookshelfSort { heatScore, updatedAt, title, createdAt }
@@ -20,14 +24,18 @@ class BookshelfScreen extends ConsumerStatefulWidget {
 
 class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
   int? _selectedTier; // null = all, -1 = unsorted, 0-3 = tier
+  BookmarkGenre? _genreFilter; // null = all genres
+  bool _genreFilterActive = false; // true when unclassified is explicitly selected
   BookshelfSort _sort = BookshelfSort.heatScore;
   String _searchQuery = '';
   final _searchController = TextEditingController();
   bool _showSearch = false;
-
-  // Additional filter flags
-  bool _completedOnly = false;
   bool _longSeriesOnly = false; // 100+ episodes
+  String? _stampFilter; // selected emoji or null
+  Set<int> _selectedCategoryIds = {};
+  Set<NovelSite> _siteFilter = {};
+
+  static const _stampEmojis = ['🔥', '😭', '🌿', '😍', '🤯'];
 
   @override
   void initState() {
@@ -41,22 +49,36 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
     super.dispose();
   }
 
-  List<Bookmark> _filterAndSort(List<Bookmark> bookmarks) {
+  List<Bookmark> _filterAndSort(
+      List<Bookmark> bookmarks, Map<int, Set<String>> stampMap) {
     var filtered = bookmarks.where((b) {
-      // Tier filter
+      if (b.tier == 0) return false; // always hide trash
       if (_selectedTier != null && b.tier != _selectedTier) return false;
-
-      // Completed filter
-      if (_completedOnly && b.novel?.serialStatus.name != 'completed') {
+      if (_genreFilterActive) {
+        // 未分類フィルター
+        if (b.genre != null) return false;
+      } else if (_genreFilter != null && b.genre != _genreFilter) {
         return false;
       }
 
-      // Long series filter
-      if (_longSeriesOnly && (b.novel?.totalEpisodes ?? 0) < 100) {
+      if (_longSeriesOnly && (b.novel?.totalEpisodes ?? 0) < 100) return false;
+
+      if (_stampFilter != null) {
+        final emojis = stampMap[b.novelId];
+        if (emojis == null || !emojis.contains(_stampFilter)) return false;
+      }
+
+      if (_selectedCategoryIds.isNotEmpty) {
+        final bookmarkCategoryIds = b.categories.map((c) => c.id).toSet();
+        if (bookmarkCategoryIds.intersection(_selectedCategoryIds).isEmpty) {
+          return false;
+        }
+      }
+
+      if (_siteFilter.isNotEmpty && !_siteFilter.contains(b.novel?.site)) {
         return false;
       }
 
-      // Search
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
         final title = (b.novel?.title ?? '').toLowerCase();
@@ -67,7 +89,6 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
       return true;
     }).toList();
 
-    // Sort
     switch (_sort) {
       case BookshelfSort.heatScore:
         filtered.sort((a, b) => b.heatScore.compareTo(a.heatScore));
@@ -90,9 +111,20 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
     return filtered;
   }
 
+  bool get _isFilterActive =>
+      _selectedTier != null ||
+      _genreFilter != null ||
+      _genreFilterActive ||
+      _longSeriesOnly ||
+      _stampFilter != null ||
+      _selectedCategoryIds.isNotEmpty ||
+      _siteFilter.isNotEmpty;
+
   @override
   Widget build(BuildContext context) {
     final bookmarksAsync = ref.watch(bookmarkListProvider);
+    final stampMapAsync = ref.watch(allUserStampsProvider);
+    final stampMap = stampMapAsync.valueOrNull ?? {};
 
     return Scaffold(
       appBar: AppBar(
@@ -140,9 +172,51 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: Row(
               children: [
-                _filterChip('全て', _selectedTier == null, () {
-                  setState(() => _selectedTier = null);
+                _filterChip('全て', !_isFilterActive, () {
+                  setState(() {
+                    _selectedTier = null;
+                    _genreFilter = null;
+                    _genreFilterActive = false;
+                    _longSeriesOnly = false;
+                    _stampFilter = null;
+                    _selectedCategoryIds = {};
+                    _siteFilter = {};
+                  });
                 }),
+                // Category filter
+                const SizedBox(width: 4),
+                const VerticalDivider(width: 1, indent: 6, endIndent: 6),
+                const SizedBox(width: 4),
+                _categoryFilterChip(),
+                // Site filter
+                const SizedBox(width: 4),
+                const VerticalDivider(width: 1, indent: 6, endIndent: 6),
+                const SizedBox(width: 4),
+                for (final site in NovelSite.values) _siteFilterChip(site),
+                // Genre filters
+                const SizedBox(width: 4),
+                const VerticalDivider(width: 1, indent: 6, endIndent: 6),
+                const SizedBox(width: 4),
+                _filterChip('📖 オリジナル', _genreFilter == BookmarkGenre.original, () {
+                  setState(() {
+                    _genreFilterActive = false;
+                    _genreFilter = _genreFilter == BookmarkGenre.original
+                        ? null
+                        : BookmarkGenre.original;
+                  });
+                }),
+                _filterChip('🎭 二次創作', _genreFilter == BookmarkGenre.derivative, () {
+                  setState(() {
+                    _genreFilterActive = false;
+                    _genreFilter = _genreFilter == BookmarkGenre.derivative
+                        ? null
+                        : BookmarkGenre.derivative;
+                  });
+                }),
+                // Tier / series filters
+                const SizedBox(width: 4),
+                const VerticalDivider(width: 1, indent: 6, endIndent: 6),
+                const SizedBox(width: 4),
                 _filterChip('👑 殿堂入り', _selectedTier == 3, () {
                   setState(() => _selectedTier = _selectedTier == 3 ? null : 3);
                 }),
@@ -156,12 +230,24 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
                   setState(
                       () => _selectedTier = _selectedTier == -1 ? null : -1);
                 }),
-                _filterChip('完結済', _completedOnly, () {
-                  setState(() => _completedOnly = !_completedOnly);
-                }),
                 _filterChip('長編(100話+)', _longSeriesOnly, () {
                   setState(() => _longSeriesOnly = !_longSeriesOnly);
                 }),
+                _filterChip('❓ 未分類', _genreFilterActive, () {
+                  setState(() {
+                    _genreFilter = null;
+                    _genreFilterActive = !_genreFilterActive;
+                  });
+                }),
+                // Stamp emoji filters
+                const SizedBox(width: 4),
+                const VerticalDivider(width: 1, indent: 6, endIndent: 6),
+                const SizedBox(width: 4),
+                for (final emoji in _stampEmojis)
+                  _filterChip(emoji, _stampFilter == emoji, () {
+                    setState(() =>
+                        _stampFilter = _stampFilter == emoji ? null : emoji);
+                  }),
               ],
             ),
           ),
@@ -170,7 +256,7 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
           Expanded(
             child: bookmarksAsync.when(
               data: (bookmarks) {
-                final filtered = _filterAndSort(bookmarks);
+                final filtered = _filterAndSort(bookmarks, stampMap);
                 if (filtered.isEmpty) {
                   return const Center(
                     child: Text('該当する作品がありません'),
@@ -202,7 +288,7 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
                               builder: (context) => AlertDialog(
                                 title: const Text('ブックマークを削除'),
                                 content: Text(
-                                  '「${bookmark.novel?.title ?? "この作品"}」を本棚から削除しますか？'),
+                                    '「${bookmark.novel?.title ?? "この作品"}」を本棚から削除しますか？'),
                                 actions: [
                                   TextButton(
                                     onPressed: () =>
@@ -255,6 +341,66 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
         label: Text(label, style: const TextStyle(fontSize: 12)),
         selected: selected,
         onSelected: (_) => onTap(),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+
+  Widget _siteFilterChip(NovelSite site) {
+    final selected = _siteFilter.contains(site);
+    final label = switch (site) {
+      NovelSite.narou => 'なろう',
+      NovelSite.hameln => 'ハーメルン',
+      NovelSite.arcadia => 'Arcadia',
+    };
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: FilterChip(
+        avatar: SizedBox(
+          width: 16,
+          height: 16,
+          child: SiteBadge(site: site, size: 16),
+        ),
+        label: Text(label, style: const TextStyle(fontSize: 12)),
+        selected: selected,
+        onSelected: (_) {
+          setState(() {
+            if (selected) {
+              _siteFilter = Set.from(_siteFilter)..remove(site);
+            } else {
+              _siteFilter = Set.from(_siteFilter)..add(site);
+            }
+          });
+        },
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+
+  Widget _categoryFilterChip() {
+    final isActive = _selectedCategoryIds.isNotEmpty;
+    final label = isActive
+        ? 'カテゴリ (${_selectedCategoryIds.length})'
+        : 'カテゴリ';
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: FilterChip(
+        label: Text(label, style: const TextStyle(fontSize: 12)),
+        selected: isActive,
+        avatar: const Icon(Icons.label_outline, size: 14),
+        onSelected: (_) async {
+          final result = await CategoryPickSheet.show(
+            context,
+            initialSelectedIds: Set.from(_selectedCategoryIds),
+            mode: CategoryPickMode.filter,
+          );
+          if (result != null) {
+            setState(() => _selectedCategoryIds = result);
+          }
+        },
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.compact,
       ),

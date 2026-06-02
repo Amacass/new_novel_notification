@@ -83,6 +83,30 @@ class BookshelfCard extends StatelessWidget {
                               ),
                             ),
                           ),
+                        if (bookmark.categories.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          ...bookmark.categories.take(3).map(
+                                (cat) => Padding(
+                                  padding: const EdgeInsets.only(right: 3),
+                                  child: Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: BoxDecoration(
+                                      color: cat.colorValue,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          if (bookmark.categories.length > 3)
+                            Text(
+                              '+${bookmark.categories.length - 3}',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                fontSize: 9,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                        ],
                       ],
                     ),
                   ],

@@ -1,4 +1,25 @@
+import 'category.dart';
 import 'novel.dart';
+
+enum BookmarkGenre {
+  original, // オリジナル
+  derivative; // 二次創作
+
+  static BookmarkGenre? fromString(String? value) {
+    if (value == 'original') return BookmarkGenre.original;
+    if (value == 'derivative') return BookmarkGenre.derivative;
+    return null;
+  }
+
+  String get label {
+    switch (this) {
+      case BookmarkGenre.original:
+        return 'オリジナル';
+      case BookmarkGenre.derivative:
+        return '二次創作';
+    }
+  }
+}
 
 class Bookmark {
   final int id;
@@ -7,12 +28,14 @@ class Bookmark {
   final int lastReadEpisode;
   final String? memo;
   final int tier; // -1=未仕分け, 0=ゴミ箱, 1=キープ, 2=良作, 3=殿堂入り
+  final BookmarkGenre? genre; // null=未分類, original=オリジナル, derivative=二次創作
   final double heatScore;
   final DateTime? lastStampedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
   final Novel? novel;
   final Review? review;
+  final List<BookshelfCategory> categories;
 
   const Bookmark({
     required this.id,
@@ -21,12 +44,14 @@ class Bookmark {
     this.lastReadEpisode = 0,
     this.memo,
     this.tier = -1,
+    this.genre,
     this.heatScore = 0.0,
     this.lastStampedAt,
     required this.createdAt,
     required this.updatedAt,
     this.novel,
     this.review,
+    this.categories = const [],
   });
 
   int get unreadCount {
@@ -42,6 +67,7 @@ class Bookmark {
       lastReadEpisode: json['last_read_episode'] as int? ?? 0,
       memo: json['memo'] as String?,
       tier: json['tier'] as int? ?? -1,
+      genre: BookmarkGenre.fromString(json['genre'] as String?),
       heatScore: (json['heat_score'] as num?)?.toDouble() ?? 0.0,
       lastStampedAt: json['last_stamped_at'] != null
           ? DateTime.parse(json['last_stamped_at'] as String)
@@ -54,6 +80,11 @@ class Bookmark {
       review: json['reviews'] != null
           ? Review.fromJson(json['reviews'] as Map<String, dynamic>)
           : null,
+      categories: (json['bookmark_categories'] as List? ?? [])
+          .where((bc) => (bc as Map<String, dynamic>)['user_categories'] != null)
+          .map((bc) => BookshelfCategory.fromJson(
+              (bc as Map<String, dynamic>)['user_categories'] as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -64,12 +95,14 @@ class Bookmark {
     int? lastReadEpisode,
     String? memo,
     int? tier,
+    Object? genre = _sentinel,
     double? heatScore,
     DateTime? lastStampedAt,
     DateTime? createdAt,
     DateTime? updatedAt,
     Novel? novel,
     Review? review,
+    List<BookshelfCategory>? categories,
   }) {
     return Bookmark(
       id: id ?? this.id,
@@ -78,14 +111,18 @@ class Bookmark {
       lastReadEpisode: lastReadEpisode ?? this.lastReadEpisode,
       memo: memo ?? this.memo,
       tier: tier ?? this.tier,
+      genre: genre == _sentinel ? this.genre : genre as BookmarkGenre?,
       heatScore: heatScore ?? this.heatScore,
       lastStampedAt: lastStampedAt ?? this.lastStampedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       novel: novel ?? this.novel,
       review: review ?? this.review,
+      categories: categories ?? this.categories,
     );
   }
+
+  static const Object _sentinel = Object();
 }
 
 class Review {

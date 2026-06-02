@@ -20,7 +20,7 @@ class BookmarkListNotifier extends AsyncNotifier<List<Bookmark>> {
 
     final response = await supabase
         .from('bookmarks')
-        .select('*, novels(*)')
+        .select('*, novels(*), bookmark_categories(category_id, user_categories(*))')
         .eq('user_id', userId)
         .order('created_at', ascending: false);
 
@@ -62,28 +62,36 @@ class BookmarkListNotifier extends AsyncNotifier<List<Bookmark>> {
   }
 
   Future<void> refresh() async {
-    state = const AsyncLoading();
+    // Don't set AsyncLoading: preserve current data while fetching to avoid counts flashing to 0
     state = await AsyncValue.guard(_fetchBookmarks);
   }
 
-  Future<void> addBookmark({
-    required int novelId,
-  }) async {
+  /// Returns true if bookmark was newly added or restored from trash,
+  /// false if it already exists with tier != 0.
+  Future<bool> addBookmark({required int novelId}) async {
     final userId = supabase.auth.currentUser?.id;
-    if (userId == null) return;
+    if (userId == null) return false;
 
-    // Check if bookmark already exists for this novel
     final existing = await supabase
         .from('bookmarks')
-        .select('id')
+        .select('id, tier')
         .eq('user_id', userId)
         .eq('novel_id', novelId)
         .maybeSingle();
 
     if (existing != null) {
-      // Already bookmarked - just refresh to ensure local state is current
+      if ((existing['tier'] as int?) == 0) {
+        // Restore from trash as unsorted
+        await supabase.from('bookmarks').update({
+          'tier': -1,
+          'last_read_episode': 0,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', existing['id']);
+        await refresh();
+        return true;
+      }
       await refresh();
-      return;
+      return false;
     }
 
     await supabase.from('bookmarks').insert({
@@ -92,6 +100,7 @@ class BookmarkListNotifier extends AsyncNotifier<List<Bookmark>> {
     });
 
     await refresh();
+    return true;
   }
 
   Future<void> removeBookmark(int bookmarkId) async {
@@ -126,6 +135,15 @@ class BookmarkListNotifier extends AsyncNotifier<List<Bookmark>> {
     await refresh();
   }
 
+  Future<void> updateGenre(int bookmarkId, BookmarkGenre? genre) async {
+    await supabase.from('bookmarks').update({
+      'genre': genre?.name,
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', bookmarkId);
+
+    await refresh();
+  }
+
   Future<void> updateHeatScore(int bookmarkId, double score) async {
     await supabase.from('bookmarks').update({
       'heat_score': score,
@@ -137,6 +155,41 @@ class BookmarkListNotifier extends AsyncNotifier<List<Bookmark>> {
           if (b.id == bookmarkId) return b.copyWith(heatScore: score);
           return b;
         }).toList());
+  }
+
+  Future<void> assignCategory(int bookmarkId, int categoryId) async {
+    await supabase.from('bookmark_categories').insert({
+      'bookmark_id': bookmarkId,
+      'category_id': categoryId,
+    });
+  }
+
+  Future<void> unassignCategory(int bookmarkId, int categoryId) async {
+    await supabase
+        .from('bookmark_categories')
+        .delete()
+        .eq('bookmark_id', bookmarkId)
+        .eq('category_id', categoryId);
+  }
+
+  Future<void> syncCategories(
+    int bookmarkId,
+    Set<int> oldIds,
+    Set<int> newIds,
+  ) async {
+    final toAdd = newIds.difference(oldIds);
+    final toRemove = oldIds.difference(newIds);
+
+    for (final id in toAdd) {
+      await assignCategory(bookmarkId, id);
+    }
+    for (final id in toRemove) {
+      await unassignCategory(bookmarkId, id);
+    }
+
+    if (toAdd.isNotEmpty || toRemove.isNotEmpty) {
+      await refresh();
+    }
   }
 
   Future<void> updateLastStampedAt(int bookmarkId) async {

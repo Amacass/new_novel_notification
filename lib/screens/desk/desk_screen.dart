@@ -269,12 +269,6 @@ class _DeskScreenState extends ConsumerState<DeskScreen> {
                         child: CompletionOverlay(
                           sortCounts: _sessionSortCounts,
                           totalSorted: triageState.total,
-                          onNewSession: () {
-                            _sessionSortCounts.updateAll((_, _) => 0);
-                            ref
-                                .read(triageProvider.notifier)
-                                .startNewSession();
-                          },
                           onGoToBookshelf: () {
                             context.go('/bookshelf');
                           },

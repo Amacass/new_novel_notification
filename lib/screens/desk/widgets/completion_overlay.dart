@@ -5,14 +5,12 @@ import '../../../utils/haptics.dart';
 class CompletionOverlay extends StatefulWidget {
   final Map<int, int> sortCounts;
   final int totalSorted;
-  final VoidCallback? onNewSession;
   final VoidCallback? onGoToBookshelf;
 
   const CompletionOverlay({
     super.key,
     required this.sortCounts,
     required this.totalSorted,
-    this.onNewSession,
     this.onGoToBookshelf,
   });
 
@@ -107,31 +105,14 @@ class _CompletionOverlayState extends State<CompletionOverlay>
               const SizedBox(height: 16),
 
               // Actions
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: widget.onNewSession,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: const BorderSide(color: Colors.white38),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
-                    ),
-                    icon: const Icon(Icons.refresh, size: 18),
-                    label: const Text('もう一回'),
-                  ),
-                  const SizedBox(width: 12),
-                  FilledButton.icon(
-                    onPressed: widget.onGoToBookshelf,
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
-                    ),
-                    icon: const Icon(Icons.library_books, size: 18),
-                    label: const Text('本棚を見る'),
-                  ),
-                ],
+              FilledButton.icon(
+                onPressed: widget.onGoToBookshelf,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 10),
+                ),
+                icon: const Icon(Icons.library_books, size: 18),
+                label: const Text('本棚を見る'),
               ),
             ],
           ),
