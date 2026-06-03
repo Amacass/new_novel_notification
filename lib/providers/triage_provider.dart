@@ -14,6 +14,7 @@ class TriageState {
   final bool isComplete;
   final bool isLoading;
   final String? error;
+  final Set<int> duplicateBookmarkIds;
 
   const TriageState({
     this.session,
@@ -24,6 +25,7 @@ class TriageState {
     this.isComplete = false,
     this.isLoading = true,
     this.error,
+    this.duplicateBookmarkIds = const {},
   });
 
   int get remaining => cards.length - currentIndex;
@@ -38,6 +40,7 @@ class TriageState {
     bool? isComplete,
     bool? isLoading,
     String? error,
+    Set<int>? duplicateBookmarkIds,
     bool clearLastResult = false,
     bool clearError = false,
   }) {
@@ -52,6 +55,7 @@ class TriageState {
       isComplete: isComplete ?? this.isComplete,
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
+      duplicateBookmarkIds: duplicateBookmarkIds ?? this.duplicateBookmarkIds,
     );
   }
 }
@@ -75,24 +79,30 @@ class TriageNotifier extends StateNotifier<TriageState> {
   /// Called after initial load is complete.
   void _startListeningForNewBookmarks() {
     if (_isListening) return;
+    if (!mounted) return;
     _isListening = true;
-    _ref.listen<AsyncValue<List<Bookmark>>>(bookmarkListProvider, (prev, next) {
-      if (state.isLoading) return;
-      final newList = next.valueOrNull;
-      if (newList == null) return;
+    try {
+      _ref.listen<AsyncValue<List<Bookmark>>>(bookmarkListProvider, (prev, next) {
+        if (!mounted) return;
+        if (state.isLoading) return;
+        final newList = next.valueOrNull;
+        if (newList == null) return;
 
-      for (final bookmark in newList) {
-        if (!_knownBookmarkIds.contains(bookmark.id) &&
-            bookmark.tier < 0 &&
-            !state.cards.any((c) => c.id == bookmark.id)) {
-          // New unsorted bookmark detected - add to triage
-          addNewBookmark(bookmark);
+        for (final bookmark in newList) {
+          if (!_knownBookmarkIds.contains(bookmark.id) &&
+              bookmark.tier < 0 &&
+              !state.cards.any((c) => c.id == bookmark.id)) {
+            // New unsorted bookmark detected - add to triage
+            addNewBookmark(bookmark);
+          }
         }
-      }
 
-      // Update known IDs
-      _knownBookmarkIds = newList.map((b) => b.id).toSet();
-    });
+        // Update known IDs
+        _knownBookmarkIds = newList.map((b) => b.id).toSet();
+      });
+    } catch (_) {
+      // Provider was disposed before listener could be registered
+    }
   }
 
   Future<void> _init() async {
@@ -101,12 +111,15 @@ class TriageNotifier extends StateNotifier<TriageState> {
     try {
       final userId = supabase.auth.currentUser?.id;
       if (userId == null) {
+        if (!mounted) return;
         state = state.copyWith(isLoading: false);
         _startListeningForNewBookmarks();
         return;
       }
 
       final bookmarks = await _waitForBookmarks();
+      if (!mounted) return;
+
       if (bookmarks.isEmpty) {
         _knownBookmarkIds = {};
         state = state.copyWith(isLoading: false);
@@ -127,10 +140,13 @@ class TriageNotifier extends StateNotifier<TriageState> {
             .maybeSingle();
       } catch (_) {
         // triage_sessions table not yet migrated - local-only mode (expected)
+        if (!mounted) return;
         _loadCardsWithoutSession(bookmarks);
         _startListeningForNewBookmarks();
         return;
       }
+
+      if (!mounted) return;
 
       if (sessionResponse != null) {
         await _resumeSession(sessionResponse, bookmarks);
@@ -138,12 +154,14 @@ class TriageNotifier extends StateNotifier<TriageState> {
         await _createNewSession(bookmarks);
       }
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(
         isLoading: false,
         error: e.toString(),
       );
     }
 
+    if (!mounted) return;
     // Start listening for new bookmarks after initial load
     _startListeningForNewBookmarks();
   }
@@ -269,6 +287,14 @@ class TriageNotifier extends StateNotifier<TriageState> {
 
     final bookmark = state.cards[state.currentIndex];
 
+    // Remove from duplicate tracking after sort
+    if (state.duplicateBookmarkIds.contains(bookmark.id)) {
+      state = state.copyWith(
+        duplicateBookmarkIds: Set<int>.from(state.duplicateBookmarkIds)
+          ..remove(bookmark.id),
+      );
+    }
+
     // Save result to DB if session exists
     TriageResult? result;
     if (state.session != null) {
@@ -370,6 +396,7 @@ class TriageNotifier extends StateNotifier<TriageState> {
   Future<void> startNewSession() async {
     state = state.copyWith(isLoading: true);
     final bookmarks = await _waitForBookmarks();
+    if (!mounted) return;
     await _createNewSession(bookmarks);
   }
 
@@ -381,7 +408,6 @@ class TriageNotifier extends StateNotifier<TriageState> {
     if (state.cards.any((c) => c.id == bookmark.id)) return;
 
     final cards = List<Bookmark>.from(state.cards);
-    // Insert after current index so it appears soon
     final insertAt = state.currentIndex + 1;
     if (insertAt <= cards.length) {
       cards.insert(insertAt, bookmark);
@@ -392,6 +418,32 @@ class TriageNotifier extends StateNotifier<TriageState> {
     state = state.copyWith(
       cards: cards,
       isComplete: false,
+    );
+  }
+
+  /// Add an already-registered bookmark to triage, flagged as duplicate.
+  void addDuplicateBookmark(Bookmark bookmark) {
+    if (state.isLoading) return;
+
+    final cards = List<Bookmark>.from(state.cards);
+    // Replace existing entry if already in deck, otherwise insert
+    final existingIdx = cards.indexWhere((c) => c.id == bookmark.id);
+    if (existingIdx >= 0) {
+      cards[existingIdx] = bookmark;
+    } else {
+      final insertAt = state.currentIndex + 1;
+      if (insertAt <= cards.length) {
+        cards.insert(insertAt, bookmark);
+      } else {
+        cards.add(bookmark);
+      }
+    }
+
+    state = state.copyWith(
+      cards: cards,
+      isComplete: false,
+      duplicateBookmarkIds: Set<int>.from(state.duplicateBookmarkIds)
+        ..add(bookmark.id),
     );
   }
 }

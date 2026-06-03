@@ -40,16 +40,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('確認メールを送信しました。メールを確認してください。')),
-        );
-        context.go('/login');
-      }
+      if (!mounted) return;
+      context.go('/home');
     } catch (e) {
       if (mounted) {
+        final msg = e.toString().contains('already registered') ||
+                e.toString().contains('already exists') ||
+                e.toString().contains('user_already_exists') ||
+                e.toString().contains('email_exists')
+            ? 'このメールアドレスは既に登録されています。'
+            : '登録に失敗しました。';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('登録に失敗しました: ${e.toString()}')),
+          SnackBar(content: Text(msg)),
         );
       }
     } finally {

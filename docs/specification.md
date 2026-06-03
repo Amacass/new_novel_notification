@@ -901,7 +901,7 @@ SELECT cron.schedule(
 
 ```
 目次URL: https://syosetu.org/novel/{novel_id}/
-User-Agent: NovelNotificationApp/1.0 (contact: <developer email>)
+User-Agent: NovelmarkApp/1.0 (contact: <developer email>)
 
 レート制限: 3秒/リクエスト以上
 

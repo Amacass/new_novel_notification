@@ -7,7 +7,7 @@ Future<void> initSupabase() async {
 
   if (url == null || url.isEmpty || anonKey == null || anonKey.isEmpty) {
     throw StateError(
-      '.env ファイルに SUPABASE_URL と SUPABASE_ANON_KEY が必要です',
+      '.env.<FLAVOR> ファイルに SUPABASE_URL と SUPABASE_ANON_KEY が必要です',
     );
   }
 

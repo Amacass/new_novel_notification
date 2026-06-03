@@ -10,6 +10,7 @@ export interface HamelnNovelData {
   totalEpisodes: number;
   latestEpisodeId: string;
   latestEpisodeTitle: string;
+  latestUpdatedAt: string | null;
   episodes: EpisodeInfo[];
 }
 
@@ -25,7 +26,7 @@ export async function fetchHamelnNovel(
     const response = await fetch(url, {
       headers: {
         "User-Agent":
-          "NovelNotificationApp/1.0 (Web Novel Update Checker)",
+          "NovelmarkApp/1.0 (Web Novel Update Checker)",
         Accept: "text/html",
       },
     });
@@ -50,11 +51,19 @@ function parseHamelnToc(html: string): HamelnNovelData | null {
     ? decodeHtmlEntities(titleMatch[1])
     : "不明なタイトル";
 
-  // Extract author: 作者：<span itemprop="author"><a href="...">author</a></span>
-  const authorMatch = html.match(/itemprop="author"[^>]*><a[^>]*>(.+?)<\/a>/);
+  // Extract author: 作者：<span itemprop="author">author</span>
+  // Note: author name may appear as plain text or wrapped in <a> tag
+  const authorMatch = html.match(/itemprop="author"[^>]*>(?:<a[^>]*>)?([^<]+)/);
   const author = authorMatch
-    ? decodeHtmlEntities(authorMatch[1])
+    ? decodeHtmlEntities(authorMatch[1].trim())
     : "不明な作者";
+
+  // Extract latest updated date: <time itemprop="dateModified" datetime="YYYY-MM-DDTHH:MMZ">
+  // Note: Hameln incorrectly marks JST times with Z suffix — replace Z with +09:00
+  const dateModifiedMatch = html.match(/<time\s+itemprop="dateModified"\s+datetime="([^"]+)"/);
+  const latestUpdatedAt = dateModifiedMatch
+    ? dateModifiedMatch[1].replace(/Z$/, "+09:00")
+    : null;
 
   // Extract episode links: <a href=./N.html style="text-decoration:none;">title</a>
   // Note: href is unquoted relative URL (./1.html, ./2.html, ...)
@@ -79,6 +88,7 @@ function parseHamelnToc(html: string): HamelnNovelData | null {
     totalEpisodes: episodes.length,
     latestEpisodeId: latest.id,
     latestEpisodeTitle: latest.title,
+    latestUpdatedAt,
     episodes: episodes.map((ep, idx) => ({
       siteEpisodeId: ep.id,
       episodeNumber: idx + 1,
@@ -99,7 +109,7 @@ export async function fetchHamelnNovelsByAuthor(
     const response = await fetch(url, {
       headers: {
         "User-Agent":
-          "NovelNotificationApp/1.0 (Web Novel Update Checker)",
+          "NovelmarkApp/1.0 (Web Novel Update Checker)",
         Accept: "text/html",
       },
     });
@@ -136,6 +146,9 @@ function decodeHtmlEntities(str: string): string {
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
     .replace(/&#39;/g, "'")
-    .replace(/<[^>]+>/g, ""); // Strip remaining HTML tags
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/<[^>]+>/g, "");
 }

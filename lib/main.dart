@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,30 +12,44 @@ import 'providers/shared_url_provider.dart';
 import 'services/fcm_service.dart';
 
 Future<void> main() async {
+  await runZonedGuarded(_main, (error, stack) {
+    debugPrint('FATAL ERROR: $error\n$stack');
+  });
+}
+
+Future<void> _main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables
-  await dotenv.load(fileName: '.env');
+  const flavor = String.fromEnvironment('FLAVOR', defaultValue: 'development');
+  await dotenv.load(fileName: '.env.$flavor');
 
   // Initialize Supabase
   await initSupabase();
 
   // Initialize Firebase (requires GoogleService-Info.plist / google-services.json)
-  await Firebase.initializeApp();
+  bool firebaseInitialized = false;
+  try {
+    await Firebase.initializeApp();
+    firebaseInitialized = true;
+  } catch (e) {
+    debugPrint('Firebase initialization failed: $e');
+  }
 
-  // Set Japanese locale for timeago
-  timeago.setLocaleMessages('ja', timeago.JaMessages());
+  timeago.setLocaleMessages('ja', _JaMessages());
 
   final container = ProviderContainer();
 
-  // Listen for shared URLs from iOS Share Extension
+  // Listen for shared URLs from Safari Extension (sent as a batch array)
   const channel = MethodChannel('com.amacass.novelNotification/share');
   channel.setMethodCallHandler((call) async {
-    if (call.method == 'sharedUrl') {
-      final url = call.arguments as String?;
-      if (url != null && url.isNotEmpty) {
-        container.read(sharedUrlProvider.notifier).state = url;
-      }
+    if (call.method == 'sharedUrls') {
+      final incoming = (call.arguments as List?)
+          ?.whereType<String>()
+          .where((u) => u.isNotEmpty)
+          .toList() ?? [];
+      if (incoming.isEmpty) return;
+      final current = container.read(sharedUrlProvider);
+      container.read(sharedUrlProvider.notifier).state = [...current, ...incoming];
     }
   });
 
@@ -50,6 +65,31 @@ Future<void> main() async {
     ),
   );
 
-  // FCM初期化（ログイン後に実行される前提でrunApp後に呼ぶ）
-  await FcmService().initialize();
+  // FCM初期化（Firebase が初期化できた場合のみ実行）
+  if (firebaseInitialized) {
+    try {
+      await FcmService().initialize();
+    } catch (e) {
+      debugPrint('FCM initialization failed: $e');
+    }
+  }
+}
+
+class _JaMessages implements timeago.LookupMessages {
+  @override String prefixAgo() => '';
+  @override String prefixFromNow() => '';
+  @override String suffixAgo() => '前';
+  @override String suffixFromNow() => '後';
+  @override String lessThanOneMinute(int seconds) => 'たった今';
+  @override String aboutAMinute(int minutes) => '1分';
+  @override String minutes(int minutes) => '$minutes分';
+  @override String aboutAnHour(int minutes) => '${minutes ~/ 60}時間';
+  @override String hours(int hours) => '$hours時間';
+  @override String aDay(int hours) => '${hours ~/ 24}日';
+  @override String days(int days) => '$days日';
+  @override String aboutAMonth(int days) => '${days ~/ 30}ヶ月';
+  @override String months(int months) => '$months月';
+  @override String aboutAYear(int year) => '約1年';
+  @override String years(int years) => '$years年';
+  @override String wordSeparator() => '';
 }

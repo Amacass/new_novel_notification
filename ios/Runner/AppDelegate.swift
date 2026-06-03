@@ -1,4 +1,5 @@
 import Flutter
+import ObjectiveC
 import UIKit
 
 @main
@@ -10,19 +11,28 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    Self.patchVSyncClientCrash()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  // Workaround: iOS 26 + ProMotion causes a null-pointer crash in Flutter's VSyncClient
+  // during createTouchRateCorrectionVSyncClientIfNeeded. Replace with no-op at runtime.
+  private static func patchVSyncClientCrash() {
+    let sel = Selector("createTouchRateCorrectionVSyncClientIfNeeded")
+    guard let method = class_getInstanceMethod(FlutterViewController.self, sel) else { return }
+    let noop: @convention(block) (AnyObject) -> Void = { _ in }
+    method_setImplementation(method, imp_implementationWithBlock(noop as AnyObject))
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
 
-    // Flutter からセッショントークンを受け取り App Group に保存
-    // Safari Extension がこのトークンを使って Supabase に直接登録する
+    guard let messenger = engineBridge.pluginRegistry.registrar(forPlugin: "session")?.messenger() else { return }
     let channel = FlutterMethodChannel(
       name: "com.amacass.novelNotification/session",
-      binaryMessenger: engineBridge.pluginRegistry.registrar(forPlugin: "session").messenger()
+      binaryMessenger: messenger
     )
-    channel.setMethodCallHandler { [weak self] call, result in
+    channel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
       guard let self else { return }
       switch call.method {
       case "saveSession":
@@ -33,13 +43,13 @@ import UIKit
           defaults.set(token, forKey: "supabase_access_token")
           defaults.synchronize()
         }
-        result(nil)
+        result(nil as Any?)
       case "clearSession":
         if let defaults = UserDefaults(suiteName: self.appGroupId) {
           defaults.removeObject(forKey: "supabase_access_token")
           defaults.synchronize()
         }
-        result(nil)
+        result(nil as Any?)
       default:
         result(FlutterMethodNotImplemented)
       }

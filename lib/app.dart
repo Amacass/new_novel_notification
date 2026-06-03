@@ -20,7 +20,8 @@ class App extends ConsumerStatefulWidget {
 }
 
 class _AppState extends ConsumerState<App> {
-  bool _isProcessingUrl = false;
+  final _urlQueue = <String>[];
+  bool _isProcessingQueue = false;
 
   @override
   Widget build(BuildContext context) {
@@ -28,16 +29,17 @@ class _AppState extends ConsumerState<App> {
     final router = ref.watch(routerProvider);
     ref.watch(realtimeProvider);
 
-    // Listen for shared URL and auto-register bookmark
-    ref.listen<String?>(sharedUrlProvider, (prev, next) {
-      if (next != null && next.isNotEmpty) {
-        ref.read(sharedUrlProvider.notifier).state = null;
-        _autoRegisterBookmark(next);
+    // Listen for shared URLs and process them as a queue
+    ref.listen<List<String>>(sharedUrlProvider, (prev, next) {
+      if (next.isNotEmpty) {
+        ref.read(sharedUrlProvider.notifier).state = const [];
+        _urlQueue.addAll(next);
+        _drainQueue();
       }
     });
 
     return MaterialApp.router(
-      title: 'Web小説通知',
+      title: 'Novelmark',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
@@ -62,69 +64,90 @@ class _AppState extends ConsumerState<App> {
     });
   }
 
-  Future<void> _autoRegisterBookmark(String url) async {
-    if (_isProcessingUrl) return;
-    _isProcessingUrl = true;
+  void _drainQueue() {
+    if (_isProcessingQueue || _urlQueue.isEmpty) return;
+    _isProcessingQueue = true;
+    final url = _urlQueue.removeAt(0);
+    _autoRegisterBookmark(url).then((_) {
+      _isProcessingQueue = false;
+      _drainQueue();
+    });
+  }
 
+  Future<void> _autoRegisterBookmark(String url) async {
     try {
       final service = ref.read(registerNovelProvider);
-      final novel = await service.registerFromUrl(url);
+      final (novel, isNewNovel) = await service.registerFromUrl(url);
 
       if (!mounted) return;
 
-      if (novel != null) {
-        await ref
-            .read(bookmarkListProvider.notifier)
-            .addBookmark(novelId: novel.id);
-
-        if (!mounted) return;
-
-        // Update last_read_episode if URL contains episode number
-        final parsed = NovelUrlParser.parse(url);
-        final bookmarks = ref.read(bookmarkListProvider).valueOrNull ?? [];
-        final newBookmark =
-            bookmarks.where((b) => b.novelId == novel.id).firstOrNull;
-
-        if (newBookmark != null && parsed?.episodeNumber != null) {
-          if (parsed!.episodeNumber! > newBookmark.lastReadEpisode) {
-            await ref
-                .read(bookmarkListProvider.notifier)
-                .updateLastReadEpisode(
-                    newBookmark.id, parsed.episodeNumber!);
-          }
-        }
-
-        if (!mounted) return;
-
-        // Add the new bookmark to the current triage session
-        final refreshedBookmarks =
-            ref.read(bookmarkListProvider).valueOrNull ?? [];
-        final triageBookmark = refreshedBookmarks
-            .where((b) => b.novelId == novel.id)
-            .firstOrNull;
-        if (triageBookmark != null) {
-          ref.read(triageProvider.notifier).addNewBookmark(triageBookmark);
-        }
-
-        final episodeMsg = parsed?.episodeNumber != null
-            ? '（${parsed!.episodeNumber}話まで既読）'
-            : '';
-        _showSnackBar('「${novel.title}」を追加しました$episodeMsg');
-      } else {
-        _showSnackBar(
-          '対応していないURLです',
-          backgroundColor: Colors.red[700],
-        );
+      if (novel == null) {
+        _showSnackBar('対応していないURLです', backgroundColor: Colors.red[700]);
+        return;
       }
+
+      final parsed = NovelUrlParser.parse(url);
+      final isNew = await ref
+          .read(bookmarkListProvider.notifier)
+          .addBookmark(novelId: novel.id);
+
+      if (!mounted) return;
+
+      if (!isNew) {
+        final bookmarks = ref.read(bookmarkListProvider).valueOrNull ?? [];
+        final existing = bookmarks.where((b) => b.novelId == novel.id).firstOrNull;
+
+        // Update reading progress if URL contains a newer episode number
+        if (existing != null &&
+            parsed?.episodeNumber != null &&
+            parsed!.episodeNumber! > existing.lastReadEpisode) {
+          await ref
+              .read(bookmarkListProvider.notifier)
+              .updateLastReadEpisode(existing.id, parsed.episodeNumber!);
+          if (!mounted) return;
+          _showSnackBar('「${novel.title}」の既読を${parsed.episodeNumber}話に更新しました');
+          return;
+        }
+
+        if (existing != null) {
+          ref.read(triageProvider.notifier).addDuplicateBookmark(existing);
+        }
+        _showSnackBar('「${novel.title}」は既に登録済みです');
+        return;
+      }
+
+      // Update last_read_episode based on URL episode or novel's current total
+      final bookmarks = ref.read(bookmarkListProvider).valueOrNull ?? [];
+      final newBookmark =
+          bookmarks.where((b) => b.novelId == novel.id).firstOrNull;
+
+      if (newBookmark != null) {
+        if (parsed?.episodeNumber != null) {
+          await ref
+              .read(bookmarkListProvider.notifier)
+              .updateLastReadEpisode(newBookmark.id, parsed!.episodeNumber!);
+        }
+      }
+
+      if (!mounted) return;
+
+      // Add to current triage session
+      final refreshedBookmarks =
+          ref.read(bookmarkListProvider).valueOrNull ?? [];
+      final triageBookmark =
+          refreshedBookmarks.where((b) => b.novelId == novel.id).firstOrNull;
+      if (triageBookmark != null) {
+        ref.read(triageProvider.notifier).addNewBookmark(triageBookmark);
+      }
+
+      final episodeMsg = parsed?.episodeNumber != null
+          ? '（${parsed!.episodeNumber}話まで既読）'
+          : '';
+      _showSnackBar('「${novel.title}」を追加しました$episodeMsg');
     } catch (e) {
       if (mounted) {
-        _showSnackBar(
-          'ブックマーク追加に失敗しました',
-          backgroundColor: Colors.red[700],
-        );
+        _showSnackBar('登録に失敗しました。', backgroundColor: Colors.red[700]);
       }
-    } finally {
-      _isProcessingUrl = false;
     }
   }
 }

@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../legal/legal_screen.dart';
+
+final _packageInfoProvider = FutureProvider<PackageInfo>(
+  (_) => PackageInfo.fromPlatform(),
+);
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -42,41 +47,25 @@ class SettingsScreen extends ConsumerWidget {
 
           const Divider(),
 
-          // Notification section
-          _SectionHeader(title: '通知'),
-          SwitchListTile(
-            secondary: const Icon(Icons.notifications_outlined),
-            title: const Text('プッシュ通知'),
-            subtitle: const Text('更新通知を受け取る'),
-            value: true,
-            onChanged: (value) {
-              // TODO: Implement push notification toggle
-            },
-          ),
-
-          const Divider(),
-
           // Data section
           _SectionHeader(title: 'データ'),
           ListTile(
-            leading: const Icon(Icons.upload_outlined),
-            title: const Text('データエクスポート'),
-            subtitle: const Text('ブックマーク・レビューをJSON形式で出力'),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('今後のバージョンで対応予定です')),
-              );
-            },
+            leading: Icon(Icons.upload_outlined,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
+            title: Text('データエクスポート',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            subtitle: const Text('以後のバージョンにて対応予定'),
+            enabled: false,
           ),
           ListTile(
-            leading: const Icon(Icons.download_outlined),
-            title: const Text('データインポート'),
-            subtitle: const Text('エクスポートしたデータを読み込み'),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('今後のバージョンで対応予定です')),
-              );
-            },
+            leading: Icon(Icons.download_outlined,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
+            title: Text('データインポート',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            subtitle: const Text('以後のバージョンにて対応予定'),
+            enabled: false,
           ),
 
           const Divider(),
@@ -117,10 +106,15 @@ class SettingsScreen extends ConsumerWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => showLicensePage(context: context),
           ),
-          const ListTile(
-            leading: Icon(Icons.tag),
-            title: Text('バージョン'),
-            subtitle: Text('1.0.0'),
+          ListTile(
+            leading: const Icon(Icons.tag),
+            title: const Text('バージョン'),
+            subtitle: Text(
+              ref.watch(_packageInfoProvider).maybeWhen(
+                    data: (info) => info.version,
+                    orElse: () => '...',
+                  ),
+            ),
           ),
 
           const Divider(),

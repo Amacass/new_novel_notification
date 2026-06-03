@@ -118,7 +118,7 @@ class _CardStackState extends ConsumerState<CardStack>
     widget.onDragTierChanged?.call(guideTier);
   }
 
-  void _onPanEnd(DragEndDetails details) {
+  Future<void> _onPanEnd(DragEndDetails details) async {
     if (_isFlying) return;
 
     final distance = _dragOffset.distance;
@@ -128,24 +128,60 @@ class _CardStackState extends ConsumerState<CardStack>
     widget.onDragTierChanged?.call(null);
 
     if (tier != null) {
+      final triageState = ref.read(triageProvider);
+      final currentCard = triageState.currentIndex < triageState.cards.length
+          ? triageState.cards[triageState.currentIndex]
+          : null;
+
+      if (currentCard != null &&
+          triageState.duplicateBookmarkIds.contains(currentCard.id)) {
+        final confirmed = await _showDuplicateDialog();
+        if (!mounted) return;
+        if (confirmed != true) {
+          _snapBack();
+          return;
+        }
+      }
       _startFlyAnimation(tier);
     } else if (distance >= _sortThreshold) {
-      // Skip
       ref.read(triageProvider.notifier).skipCard();
       setState(() => _dragOffset = Offset.zero);
     } else {
-      // Snap back with spring
-      _snapBackAnimation = Tween<Offset>(
-        begin: _dragOffset,
-        end: Offset.zero,
-      ).animate(CurvedAnimation(
-        parent: _snapBackController,
-        curve: Curves.elasticOut,
-      ));
-      _snapBackController
-        ..reset()
-        ..forward();
+      _snapBack();
     }
+  }
+
+  void _snapBack() {
+    _snapBackAnimation = Tween<Offset>(
+      begin: _dragOffset,
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _snapBackController,
+      curve: Curves.elasticOut,
+    ));
+    _snapBackController
+      ..reset()
+      ..forward();
+  }
+
+  Future<bool?> _showDuplicateDialog() {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('既に登録済みの小説です'),
+        content: const Text('この小説は既に本棚にあります。このまま移動しますか？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('移動する'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _startFlyAnimation(int tier) {

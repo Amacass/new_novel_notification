@@ -1,0 +1,21 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+    width: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.msg {
+    width: 100%;
+    padding: 18px 20px;
+    font-size: 15px;
+    font-weight: 600;
+    text-align: center;
+    line-height: 1.4;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+.msg.success { background: #34c759; color: #fff; }
+.msg.error   { background: #ff3b30; color: #fff; }
+.msg.fade    { opacity: 0; }

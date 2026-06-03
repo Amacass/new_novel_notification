@@ -24,7 +24,8 @@ Future<void> _syncSessionToAppGroup(Session? session) async {
 final authStateProvider = StreamProvider<Session?>((ref) {
   final stream = supabase.auth.onAuthStateChange.map((event) => event.session);
   // セッション変化のたびに App Group へ同期
-  stream.listen(_syncSessionToAppGroup);
+  final subscription = stream.listen(_syncSessionToAppGroup);
+  ref.onDispose(subscription.cancel);
   return stream;
 });
 

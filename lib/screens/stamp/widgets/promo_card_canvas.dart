@@ -136,7 +136,7 @@ class PromoCardCanvas extends StatelessWidget {
           const SizedBox(height: 12),
           // Footer
           Text(
-            '📚 Web小説通知アプリから布教',
+            '📚 Novelmarkから布教',
             style: TextStyle(
               fontSize: 10,
               color: isDark ? Colors.white24 : Colors.black26,

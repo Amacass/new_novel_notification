@@ -22,7 +22,27 @@ final novelStampsProvider =
       .toList();
 });
 
-/// Total stamp count for the user (for progressive disclosure)
+/// All stamps for the current user: novelId → set of emojis
+final allUserStampsProvider =
+    FutureProvider<Map<int, Set<String>>>((ref) async {
+  final userId = supabase.auth.currentUser?.id;
+  if (userId == null) return {};
+
+  final response = await supabase
+      .from('stamps')
+      .select('novel_id, emoji')
+      .eq('user_id', userId);
+
+  final Map<int, Set<String>> result = {};
+  for (final row in response as List) {
+    final novelId = row['novel_id'] as int;
+    final emoji = row['emoji'] as String;
+    result.putIfAbsent(novelId, () => {}).add(emoji);
+  }
+  return result;
+});
+
+/// Total stamp count for the user
 final userStampCountProvider = FutureProvider<int>((ref) async {
   final userId = supabase.auth.currentUser?.id;
   if (userId == null) return 0;
@@ -45,33 +65,40 @@ class StampService {
 
   StampService(this._ref);
 
-  Future<EmotionStamp> addStamp({
+  /// Toggle: if stamp with this emoji already exists for novel, remove it.
+  /// Otherwise add it. Returns true if stamp was added, false if removed.
+  Future<bool> toggleStamp({
     required int novelId,
     required String emoji,
     int? episodeNumber,
-    List<int> charmTagIds = const [],
   }) async {
     final userId = supabase.auth.currentUser?.id;
     if (userId == null) throw Exception('Not authenticated');
 
-    // Insert stamp
-    final stampResponse = await supabase.from('stamps').insert({
+    // Check if stamp already exists for this emoji/novel
+    final existing = await supabase
+        .from('stamps')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('novel_id', novelId)
+        .eq('emoji', emoji)
+        .maybeSingle();
+
+    if (existing != null) {
+      await supabase.from('stamps').delete().eq('id', existing['id'] as int);
+      _ref.invalidate(novelStampsProvider(novelId));
+      _ref.invalidate(userStampCountProvider);
+      _ref.invalidate(allUserStampsProvider);
+      return false;
+    }
+
+    await supabase.from('stamps').insert({
       'user_id': userId,
       'novel_id': novelId,
       'emoji': emoji,
+      // ignore: use_null_aware_elements
       if (episodeNumber != null) 'episode_number': episodeNumber,
-    }).select('*, stamp_charm_tags(charm_tags(*))').single();
-
-    // Attach charm tags
-    if (charmTagIds.isNotEmpty) {
-      final stampId = stampResponse['id'] as int;
-      await supabase.from('stamp_charm_tags').insert(
-        charmTagIds.map((tagId) => {
-              'stamp_id': stampId,
-              'charm_tag_id': tagId,
-            }).toList(),
-      );
-    }
+    });
 
     // Update bookmark's last_stamped_at
     final bookmarks = _ref.read(bookmarkListProvider).valueOrNull ?? [];
@@ -82,11 +109,10 @@ class StampService {
           .updateLastStampedAt(bookmark.id);
     }
 
-    // Invalidate stamp providers
     _ref.invalidate(novelStampsProvider(novelId));
     _ref.invalidate(userStampCountProvider);
-
-    return EmotionStamp.fromJson(stampResponse);
+    _ref.invalidate(allUserStampsProvider);
+    return true;
   }
 
   Future<void> deleteStamp(int stampId, int novelId) async {

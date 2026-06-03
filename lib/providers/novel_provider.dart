@@ -43,9 +43,11 @@ final registerNovelProvider = Provider<RegisterNovelService>((ref) {
 class RegisterNovelService {
   final _dio = Dio();
 
-  Future<Novel?> registerFromUrl(String url) async {
+  /// Returns (novel, isNewNovel). isNewNovel is false when the novel was
+  /// already in the DB (registered by another user or a prior crawl).
+  Future<(Novel?, bool)> registerFromUrl(String url) async {
     final parsed = NovelUrlParser.parse(url);
-    if (parsed == null) return null;
+    if (parsed == null) return (null, false);
 
     // Check if novel already exists
     final existing = await supabase
@@ -56,14 +58,50 @@ class RegisterNovelService {
         .maybeSingle();
 
     if (existing != null) {
-      return Novel.fromJson(existing);
+      final existingNovel = Novel.fromJson(existing);
+      // If title/author are placeholders or episode count is missing, fix them
+      if (existingNovel.title == '不明なタイトル' ||
+          existingNovel.authorName == null ||
+          existingNovel.totalEpisodes == 0) {
+        final metadata =
+            await _fetchMetadata(parsed.site, parsed.siteNovelId);
+        if (metadata != null) {
+          final updates = <String, dynamic>{
+            if (existingNovel.title == '不明なタイトル' &&
+                metadata['title'] != null)
+              'title': metadata['title'],
+            if (existingNovel.authorName == null &&
+                metadata['author'] != null)
+              'author_name': metadata['author'],
+            if (existingNovel.totalEpisodes == 0 &&
+                (metadata['total_episodes'] as int? ?? 0) > 0)
+              'total_episodes': metadata['total_episodes'],
+          };
+          if (updates.isNotEmpty) {
+            await supabase
+                .from('novels')
+                .update(updates)
+                .eq('id', existingNovel.id);
+            final updatedRows = await supabase
+                .from('novels')
+                .select()
+                .eq('id', existingNovel.id)
+                .limit(1);
+            if (updatedRows.isNotEmpty) {
+              return (Novel.fromJson(updatedRows.first as Map<String, dynamic>), false);
+            }
+          }
+        }
+      }
+      return (existingNovel, false);
     }
 
     // Fetch metadata from the novel site
     final metadata = await _fetchMetadata(parsed.site, parsed.siteNovelId);
 
-    // Insert new novel with fetched metadata
-    final response = await supabase.from('novels').insert({
+    // Insert without chaining .select() to avoid PGRST116 bug in postgrest-dart
+    // with non-GET requests and maybeSingle/single.
+    await supabase.from('novels').insert({
       'site': parsed.site.name,
       'site_novel_id': parsed.siteNovelId,
       'url': parsed.normalizedUrl,
@@ -71,9 +109,18 @@ class RegisterNovelService {
       'author_name': metadata?['author'],
       'total_episodes': metadata?['total_episodes'] ?? 0,
       'last_crawled_at': DateTime.now().toIso8601String(),
-    }).select().single();
+    });
 
-    return Novel.fromJson(response);
+    // Fetch the newly inserted row via a regular GET
+    final rows = await supabase
+        .from('novels')
+        .select()
+        .eq('site', parsed.site.name)
+        .eq('site_novel_id', parsed.siteNovelId)
+        .limit(1);
+
+    if (rows.isEmpty) throw Exception('小説の登録に失敗しました');
+    return (Novel.fromJson(rows.first as Map<String, dynamic>), true);
   }
 
   Future<Map<String, dynamic>?> _fetchMetadata(
@@ -81,11 +128,11 @@ class RegisterNovelService {
     try {
       switch (site) {
         case NovelSite.narou:
-          return _fetchNarouMetadata(siteNovelId);
+          return await _fetchNarouMetadata(siteNovelId);
         case NovelSite.hameln:
-          return _fetchHamelnMetadata(siteNovelId);
+          return await _fetchHamelnMetadata(siteNovelId);
         case NovelSite.arcadia:
-          return null; // Arcadia is HTTP only, skip for now
+          return await _fetchArcadiaMetadata(siteNovelId);
       }
     } catch (e) {
       return null;
@@ -121,7 +168,7 @@ class RegisterNovelService {
       'https://syosetu.org/novel/$novelId/',
       options: Options(
         headers: {
-          'User-Agent': 'NovelNotificationApp/1.0',
+          'User-Agent': 'NovelmarkApp/1.0',
           'Cookie': 'over18=off',
         },
         responseType: ResponseType.plain,
@@ -177,6 +224,74 @@ class RegisterNovelService {
     final episodeMatches =
         RegExp(r'<a\s+href="/novel/\d+/(\d+)\.html"').allMatches(html);
     final totalEpisodes = episodeMatches.length;
+
+    return {
+      'title': title,
+      'author': author,
+      'total_episodes': totalEpisodes,
+    };
+  }
+
+  Future<Map<String, dynamic>?> _fetchArcadiaMetadata(String siteNovelId) async {
+    // siteNovelId format: "{cate}_{storyId}"
+    final parts = siteNovelId.split('_');
+    if (parts.length < 2) return null;
+    final cate = parts[0];
+    final storyId = parts.sublist(1).join('_');
+    final url =
+        'http://www.mai-net.net/bbs/sst/sst.php?act=dump&cate=$cate&all=$storyId';
+
+    final response = await _dio.get(
+      url,
+      options: Options(
+        headers: {'User-Agent': 'NovelmarkApp/1.0'},
+        responseType: ResponseType.bytes,
+      ),
+    );
+    final bytes = response.data as List<int>;
+    final html = utf8.decode(bytes);
+
+    // Title: link text in the [0] row
+    String? title;
+    final titleMatch = RegExp(
+      r'\[0\]</td><td[^>]*>(?:<b>)?(?:\s|<br\s*/?>)*<a[^>]+>(.+?)</a>',
+      caseSensitive: false,
+    ).firstMatch(html);
+    if (titleMatch != null) {
+      title = _decodeHtmlEntities(titleMatch.group(1)!).trim();
+    } else {
+      // Fallback: plain text after [0]</td><td>
+      final plainMatch =
+          RegExp(r'\[0\]</td><td[^>]*>(?:<b>)?([^<\n]+)').firstMatch(html);
+      if (plainMatch != null) {
+        title = _decodeHtmlEntities(plainMatch.group(1)!).trim();
+      }
+    }
+
+    // Author: "Name: 作者名◆ID" pattern in post body
+    String? author;
+    final nameMatch = RegExp(r'<tt>Name:\s*([^◆<\n]+)').firstMatch(html);
+    if (nameMatch != null) {
+      author = _decodeHtmlEntities(nameMatch.group(1)!).trim();
+    } else {
+      final bracketMatch = RegExp(
+        r'\[0\]</td><td[^>]*>.*?</td><td[^>]*>\[([^\]]+)\]',
+        dotAll: true,
+      ).firstMatch(html);
+      if (bracketMatch != null) {
+        author = _decodeHtmlEntities(bracketMatch.group(1)!).trim();
+      }
+    }
+
+    // Episode count from [N]</td> pattern
+    final episodeMatches =
+        RegExp(r'\[(\d+)\]</td>').allMatches(html);
+    final episodeNumbers = episodeMatches
+        .map((m) => int.tryParse(m.group(1)!) ?? 0)
+        .where((n) => n > 0)
+        .toList();
+    final totalEpisodes =
+        episodeNumbers.isNotEmpty ? episodeNumbers.reduce((a, b) => a > b ? a : b) : 0;
 
     return {
       'title': title,

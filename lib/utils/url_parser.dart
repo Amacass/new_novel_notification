@@ -64,7 +64,7 @@ class NovelUrlParser {
           site: NovelSite.arcadia,
           siteNovelId: '${cate}_$all',
           normalizedUrl:
-              'http://www.mai-net.net/bbs/sst/sst.php?act=dump&cate=$cate&all=$all',
+              'http://www.mai-net.net/bbs/sst/sst.php?cate=$cate&all=$all',
           episodeNumber: episode,
         );
       }

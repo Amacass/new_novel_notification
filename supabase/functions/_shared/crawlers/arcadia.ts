@@ -32,7 +32,7 @@ export async function fetchArcadiaNovel(
     const response = await fetch(url, {
       headers: {
         "User-Agent":
-          "NovelNotificationApp/1.0 (Web Novel Update Checker)",
+          "NovelmarkApp/1.0 (Web Novel Update Checker)",
         Accept: "text/html",
       },
     });
@@ -54,9 +54,13 @@ export async function fetchArcadiaNovel(
 
 function parseArcadiaPage(html: string): ArcadiaNovelData | null {
   // Extract title from the first entry [0] in the episode table.
-  // Each row: <td>[0]</td><td><a href="...">TITLE</a></td><td>[AUTHOR]</td><td>(DATE)</td>
+  // Row [0] is the index post. It may or may not have <b> wrapping, and
+  // may have whitespace / <br> between the <td> and <a> tag.
   const firstEntryMatch = html.match(
-    /\[0\]<\/td><td[^>]*><b>\s*\n?\s*<a[^>]+>(.+?)<\/a>/,
+    /\[0\]<\/td><td[^>]*>(?:<b>)?(?:\s|<br\s*\/?>)*<a[^>]+>(.+?)<\/a>/i,
+  ) ?? html.match(
+    // Fallback: no <a> tag – plain text content of the first <td> after [0]
+    /\[0\]<\/td><td[^>]*>(?:<b>)?([^<\n]+)/,
   );
   const title = firstEntryMatch
     ? decodeHtmlEntities(firstEntryMatch[1]).trim()
@@ -127,6 +131,9 @@ function decodeHtmlEntities(str: string): string {
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
     .replace(/&#39;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/<[^>]+>/g, "");
 }

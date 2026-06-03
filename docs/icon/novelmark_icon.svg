@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#162848" />
+      <stop offset="100%" style="stop-color:#060E25" />
+    </linearGradient>
+
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#F0DC8A" />
+      <stop offset="100%" style="stop-color:#C49030" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background (= N stroke color, N is invisible) -->
+  <rect width="1024" height="1024" fill="url(#bgGrad)"/>
+
+  <!--
+    Only the triangular negative spaces of N are drawn in gold.
+    N params: left bar x:112–276, right bar x:748–912, top y:80, bottom y:944
+
+    Upper-right triangle (above diagonal between bars):
+      vertices: (276,80) (748,80) (748,721)
+
+    Lower-left triangle (below diagonal between bars):
+      vertices: (276,303) (276,944) (748,944)
+  -->
+
+  <!-- Upper-right gold triangle -->
+  <polygon points="276,80 748,80 748,721" fill="url(#goldGrad)"/>
+
+  <!-- Lower-left gold triangle -->
+  <polygon points="276,303 276,944 748,944" fill="url(#goldGrad)"/>
+</svg>

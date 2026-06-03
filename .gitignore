@@ -1,5 +1,7 @@
 # Environment variables
 .env
+.env.development
+.env.production
 
 # Miscellaneous
 *.class
@@ -49,3 +51,6 @@ app.*.map.json
 
 # Supabase
 supabase/.temp/
+
+# Claude Code local settings
+.claude/settings.local.json
