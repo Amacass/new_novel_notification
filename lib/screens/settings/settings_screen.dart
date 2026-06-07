@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
+import 'widgets/backup_section.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -57,26 +58,7 @@ class SettingsScreen extends ConsumerWidget {
 
           // Data section
           _SectionHeader(title: 'データ'),
-          ListTile(
-            leading: const Icon(Icons.upload_outlined),
-            title: const Text('データエクスポート'),
-            subtitle: const Text('ブックマーク・レビューをJSON形式で出力'),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('今後のバージョンで対応予定です')),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.download_outlined),
-            title: const Text('データインポート'),
-            subtitle: const Text('エクスポートしたデータを読み込み'),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('今後のバージョンで対応予定です')),
-              );
-            },
-          ),
+          const BackupSection(),
 
           const Divider(),
 
