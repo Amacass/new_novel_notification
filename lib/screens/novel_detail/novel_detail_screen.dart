@@ -24,7 +24,70 @@ class NovelDetailScreen extends ConsumerStatefulWidget {
   ConsumerState<NovelDetailScreen> createState() => _NovelDetailScreenState();
 }
 
-class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
+class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen>
+    with WidgetsBindingObserver {
+  bool _openedBrowser = false;
+  bool _unreadBannerShown = false;
+  Novel? _currentNovel;
+  Bookmark? _currentBookmark;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _openedBrowser) {
+      _openedBrowser = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _showReadBanner());
+    }
+  }
+
+  void _showReadBanner() {
+    final novel = _currentNovel;
+    final bookmark = _currentBookmark;
+    if (novel == null || bookmark == null || !mounted) return;
+    if (novel.totalEpisodes <= bookmark.lastReadEpisode) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('最新話まで読みましたか？'),
+        duration: const Duration(seconds: 8),
+        action: SnackBarAction(
+          label: '更新',
+          onPressed: () => _updateToLatest(bookmark, novel.totalEpisodes),
+        ),
+      ),
+    );
+  }
+
+  void _updateToLatest(Bookmark bookmark, int newEpisode) {
+    final oldEpisode = bookmark.lastReadEpisode;
+    ref
+        .read(bookmarkListProvider.notifier)
+        .updateLastReadEpisode(bookmark.id, newEpisode);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('既読を第$newEpisode話に更新しました'),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: '元に戻す',
+          onPressed: () => ref
+              .read(bookmarkListProvider.notifier)
+              .updateLastReadEpisode(bookmark.id, oldEpisode),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final novelAsync = ref.watch(novelDetailProvider(widget.novelId));
@@ -47,6 +110,20 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
               .firstOrNull;
           final review = reviewAsync.valueOrNull;
           final stamps = stampsAsync.valueOrNull ?? [];
+
+          // Cache for lifecycle callbacks
+          _currentNovel = novel;
+          _currentBookmark = bookmark;
+
+          // Show banner once when entering with unread episodes
+          if (!_unreadBannerShown &&
+              bookmark != null &&
+              bookmark.unreadCount > 0) {
+            _unreadBannerShown = true;
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => _showReadBanner(),
+            );
+          }
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -397,6 +474,7 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
                     label: const Text('サイトで読む'),
                     onPressed: () {
                       final targetUrl = _buildReadUrl(novel, bookmark);
+                      _openedBrowser = true;
                       _openUrl(targetUrl);
                     },
                   ),

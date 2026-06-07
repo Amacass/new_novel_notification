@@ -8,12 +8,14 @@ class BookshelfCard extends StatelessWidget {
   final Bookmark bookmark;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+  final VoidCallback? onReadTap;
 
   const BookshelfCard({
     super.key,
     required this.bookmark,
     this.onTap,
     this.onLongPress,
+    this.onReadTap,
   });
 
   @override
@@ -113,7 +115,15 @@ class BookshelfCard extends StatelessWidget {
                 ),
               ),
 
-              // Chevron
+              // Read / chevron
+              if (onReadTap != null)
+                IconButton(
+                  icon: const Icon(Icons.open_in_browser, size: 20),
+                  onPressed: onReadTap,
+                  color: theme.colorScheme.primary,
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '続きを読む',
+                ),
               Icon(
                 Icons.chevron_right,
                 color: theme.colorScheme.onSurfaceVariant,

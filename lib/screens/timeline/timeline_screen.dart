@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/bookmark.dart';
 import '../../models/novel.dart';
@@ -166,8 +167,12 @@ class _TimelineItem extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.bodySmall,
       ),
-      trailing: unread > 0
-          ? Container(
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (unread > 0)
+            Container(
+              margin: const EdgeInsets.only(right: 4),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.primary,
@@ -180,9 +185,33 @@ class _TimelineItem extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
               ),
-            )
-          : null,
+            ),
+          IconButton(
+            icon: const Icon(Icons.open_in_browser, size: 20),
+            onPressed: () => _openReadUrl(),
+            visualDensity: VisualDensity.compact,
+            tooltip: '続きを読む',
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ],
+      ),
       onTap: () => context.push('/novel/${novel.id}'),
     );
+  }
+
+  Future<void> _openReadUrl() async {
+    final novel = bookmark.novel!;
+    final url = bookmark.lastReadEpisode > 0
+        ? novel.episodeUrl(bookmark.lastReadEpisode)
+        : novel.url;
+    final uri = Uri.parse(url);
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok) await launchUrl(uri, mode: LaunchMode.platformDefault);
+    } catch (_) {
+      try {
+        await launchUrl(uri, mode: LaunchMode.platformDefault);
+      } catch (_) {}
+    }
   }
 }

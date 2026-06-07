@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/bookmark.dart';
 import '../../models/novel.dart';
@@ -239,15 +240,11 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
                     _genreFilterActive = !_genreFilterActive;
                   });
                 }),
-                // Stamp emoji filters
+                // Stamp emoji filter (single chip)
                 const SizedBox(width: 4),
                 const VerticalDivider(width: 1, indent: 6, endIndent: 6),
                 const SizedBox(width: 4),
-                for (final emoji in _stampEmojis)
-                  _filterChip(emoji, _stampFilter == emoji, () {
-                    setState(() =>
-                        _stampFilter = _stampFilter == emoji ? null : emoji);
-                  }),
+                _stampFilterChip(),
               ],
             ),
           ),
@@ -274,6 +271,9 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
                         bookmark: bookmark,
                         onTap: () =>
                             context.push('/novel/${bookmark.novelId}'),
+                        onReadTap: bookmark.novel != null
+                            ? () => _openReadUrl(bookmark)
+                            : null,
                         onLongPress: () async {
                           final result =
                               await TierChangeSheet.showWithDelete(
@@ -405,6 +405,73 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
         visualDensity: VisualDensity.compact,
       ),
     );
+  }
+
+  Widget _stampFilterChip() {
+    final isActive = _stampFilter != null;
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: FilterChip(
+        label: Text(
+          isActive ? _stampFilter! : 'スタンプ',
+          style: const TextStyle(fontSize: 12),
+        ),
+        selected: isActive,
+        avatar: isActive ? null : const Icon(Icons.emoji_emotions_outlined, size: 14),
+        onSelected: (_) async {
+          if (isActive) {
+            setState(() => _stampFilter = null);
+            return;
+          }
+          final picked = await showModalBottomSheet<String>(
+            context: context,
+            builder: (ctx) => SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('スタンプで絞り込む',
+                        style: Theme.of(ctx).textTheme.titleSmall),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: _stampEmojis
+                          .map((e) => GestureDetector(
+                                onTap: () => Navigator.pop(ctx, e),
+                                child: Text(e,
+                                    style: const TextStyle(fontSize: 36)),
+                              ))
+                          .toList(),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+            ),
+          );
+          if (picked != null) setState(() => _stampFilter = picked);
+        },
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+
+  Future<void> _openReadUrl(Bookmark bookmark) async {
+    final novel = bookmark.novel!;
+    final url = bookmark.lastReadEpisode > 0
+        ? novel.episodeUrl(bookmark.lastReadEpisode)
+        : novel.url;
+    final uri = Uri.parse(url);
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok) await launchUrl(uri, mode: LaunchMode.platformDefault);
+    } catch (_) {
+      try {
+        await launchUrl(uri, mode: LaunchMode.platformDefault);
+      } catch (_) {}
+    }
   }
 
   PopupMenuItem<BookshelfSort> _sortItem(BookshelfSort sort, String label) {
