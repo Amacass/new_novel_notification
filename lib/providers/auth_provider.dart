@@ -11,6 +11,17 @@ final currentUserProvider = Provider<User?>((ref) {
   return supabase.auth.currentUser;
 });
 
+final isBannedProvider = FutureProvider<bool>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return false;
+  final row = await supabase
+      .from('profiles')
+      .select('banned_at')
+      .eq('id', user.id)
+      .single();
+  return row['banned_at'] != null;
+});
+
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository();
 });
