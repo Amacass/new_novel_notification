@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:novel_notification/widgets/rating_stars.dart';
+import 'package:novelmark/widgets/rating_stars.dart';
 
 void main() {
   Widget buildTestWidget({

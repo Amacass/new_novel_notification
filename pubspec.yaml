@@ -1,4 +1,4 @@
-name: novel_notification
+name: novelmark
 description: "Web小説更新通知アプリ"
 publish_to: 'none'
 version: 1.0.0+1

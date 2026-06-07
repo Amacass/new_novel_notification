@@ -25,7 +25,7 @@ export async function fetchArcadiaNovel(
     const response = await fetch(url, {
       headers: {
         "User-Agent":
-          "NovelNotificationApp/1.0 (Web Novel Update Checker)",
+          "NovelmarkApp/1.0 (Web Novel Update Checker)",
         Accept: "text/html",
       },
     });

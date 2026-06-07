@@ -121,7 +121,7 @@ class RegisterNovelService {
       'https://syosetu.org/novel/$novelId/',
       options: Options(
         headers: {
-          'User-Agent': 'NovelNotificationApp/1.0',
+          'User-Agent': 'NovelmarkApp/1.0',
           'Cookie': 'over18=off',
         },
         responseType: ResponseType.plain,

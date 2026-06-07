@@ -1,4 +1,4 @@
-# novel_notification
+# novelmark
 
 A new Flutter project.
 
