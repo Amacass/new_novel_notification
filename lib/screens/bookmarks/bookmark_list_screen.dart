@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../providers/bookmark_provider.dart';
 import '../../providers/novel_provider.dart';
+import '../../utils/error_message.dart';
 import '../../utils/url_parser.dart';
 import '../../widgets/novel_card.dart';
 
@@ -81,7 +82,7 @@ class _BookmarkListScreenState extends ConsumerState<BookmarkListScreen> {
                 }
               } catch (e) {
                 messenger.showSnackBar(
-                  SnackBar(content: Text('追加に失敗しました: $e')),
+                  SnackBar(content: Text('追加に失敗しました: ${errorMessage(e)}')),
                 );
               }
             },
@@ -202,7 +203,7 @@ class _BookmarkListScreenState extends ConsumerState<BookmarkListScreen> {
               loading: () =>
                   const Center(child: CircularProgressIndicator()),
               error: (error, _) =>
-                  Center(child: Text('エラー: $error')),
+                  Center(child: Text(errorMessage(error))),
             ),
           ),
         ],

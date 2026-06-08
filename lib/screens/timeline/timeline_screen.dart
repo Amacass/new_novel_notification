@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../models/bookmark.dart';
 import '../../models/novel.dart';
 import '../../providers/bookmark_provider.dart';
+import '../../utils/error_message.dart';
 import '../../widgets/site_badge.dart';
 
 class TimelineScreen extends ConsumerStatefulWidget {
@@ -91,7 +92,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) => Center(child: Text('エラー: $error')),
+              error: (error, _) => Center(child: Text(errorMessage(error))),
             ),
           ),
         ],

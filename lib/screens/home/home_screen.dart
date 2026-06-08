@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../providers/bookmark_provider.dart';
 import '../../providers/notification_provider.dart';
+import '../../utils/error_message.dart';
 import '../../widgets/novel_card.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -121,7 +122,7 @@ class HomeScreen extends ConsumerWidget {
             children: [
               const Icon(Icons.error_outline, size: 48),
               const SizedBox(height: 8),
-              Text('エラーが発生しました\n$error', textAlign: TextAlign.center),
+              Text(errorMessage(error), textAlign: TextAlign.center),
               const SizedBox(height: 16),
               FilledButton(
                 onPressed: () =>
