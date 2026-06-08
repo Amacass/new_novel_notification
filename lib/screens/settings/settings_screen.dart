@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../providers/auth_provider.dart';
+import '../../providers/recommendation_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../utils/error_message.dart';
 import '../legal/legal_screen.dart';
@@ -46,6 +47,12 @@ class SettingsScreen extends ConsumerWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _showThemeDialog(context, ref, themeMode),
           ),
+
+          const Divider(),
+
+          // Recommend section
+          _SectionHeader(title: 'おすすめ'),
+          _RecommendSettingsSection(),
 
           const Divider(),
 
@@ -229,6 +236,49 @@ class SettingsScreen extends ConsumerWidget {
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+}
+
+class _RecommendSettingsSection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settingsAsync = ref.watch(recommendSettingsProvider);
+
+    return settingsAsync.when(
+      loading: () => const ListTile(
+        leading: Icon(Icons.recommend_outlined),
+        title: Text('おすすめ設定'),
+        subtitle: Text('読み込み中...'),
+      ),
+      error: (_, _) => const SizedBox.shrink(),
+      data: (s) => Column(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.favorite_outline),
+            title: const Text('総いいね数'),
+            subtitle: Text('♡ ${s.totalLikes}'),
+          ),
+          SwitchListTile(
+            secondary: const Icon(Icons.visibility_outlined),
+            title: const Text('おすすめを閲覧する'),
+            subtitle: const Text('フッターにタブを表示'),
+            value: s.viewEnabled,
+            onChanged: (v) => ref
+                .read(recommendSettingsProvider.notifier)
+                .setViewEnabled(v),
+          ),
+          SwitchListTile(
+            secondary: const Icon(Icons.edit_outlined),
+            title: const Text('おすすめを投稿する'),
+            subtitle: const Text('小説詳細に入力欄を表示'),
+            value: s.createEnabled,
+            onChanged: (v) => ref
+                .read(recommendSettingsProvider.notifier)
+                .setCreateEnabled(v),
+          ),
+        ],
       ),
     );
   }
