@@ -65,7 +65,7 @@ void main() {
         expect(result!.site, NovelSite.arcadia);
         expect(result.siteNovelId, 'naruto_12345');
         expect(result.normalizedUrl,
-            'http://www.mai-net.net/bbs/sst/sst.php?act=dump&cate=naruto&all=12345');
+            'http://www.mai-net.net/bbs/sst/sst.php?cate=naruto&all=12345');
       });
 
       test('returns null when missing all param', () {
