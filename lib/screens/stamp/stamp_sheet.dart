@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/stamp_provider.dart';
+import '../../utils/error_message.dart';
 import '../../utils/haptics.dart';
 import 'widgets/stamp_button.dart';
 import 'widgets/stamp_effect.dart';
@@ -60,7 +61,7 @@ class _StampSheetState extends ConsumerState<StampSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('スタンプの保存に失敗しました: $e')),
+          SnackBar(content: Text('スタンプの保存に失敗しました: ${errorMessage(e)}')),
         );
       }
     }

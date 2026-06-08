@@ -5,6 +5,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
+import '../../utils/error_message.dart';
 import '../legal/legal_screen.dart';
 import 'widgets/backup_section.dart';
 
@@ -187,7 +188,7 @@ class SettingsScreen extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('削除に失敗しました: $e')),
+          SnackBar(content: Text('削除に失敗しました: ${errorMessage(e)}')),
         );
       }
     }

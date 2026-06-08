@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/charm_tag_provider.dart';
+import '../../utils/error_message.dart';
 import 'widgets/charm_tag_chip.dart';
 
 class TagSheet extends ConsumerStatefulWidget {
@@ -139,7 +140,7 @@ class _TagSheetState extends ConsumerState<TagSheet> {
                   ),
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
-                  error: (e, _) => Center(child: Text('エラー: $e')),
+                  error: (e, _) => Center(child: Text(errorMessage(e))),
                 ),
               ),
 

@@ -9,6 +9,7 @@ import '../../providers/amazon_link_provider.dart';
 import '../../providers/bookmark_provider.dart';
 import '../../providers/novel_provider.dart';
 import '../../providers/stamp_provider.dart';
+import '../../utils/error_message.dart';
 import '../../widgets/category_pick_sheet.dart';
 import '../../widgets/rating_stars.dart';
 import '../../widgets/site_badge.dart';
@@ -514,7 +515,7 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen>
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('エラー: $error')),
+        error: (error, _) => Center(child: Text(errorMessage(error))),
       ),
     );
   }
