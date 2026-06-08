@@ -7,6 +7,19 @@ import { fetchArcadiaNovel } from "../_shared/crawlers/arcadia.ts";
 import { sendFcmNotifications } from "../_shared/fcm.ts";
 
 const MAX_NOVELS_PER_RUN = 50;
+const SKIP_WINDOW_MS = 18 * 60 * 60 * 1000; // 18時間
+
+interface NovelUpdate {
+  // deno-lint-ignore no-explicit-any
+  novel: any;
+  newTotal: number;
+}
+
+interface BatchItem {
+  novel_id: number;
+  title: string;
+  new_total: number;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -18,10 +31,9 @@ serve(async (req) => {
   try {
     const client = createServiceClient();
 
-    // Get novels that need crawling (bookmarked by at least 1 user, error count < 5)
     const { data: novels, error } = await client
       .from("novels")
-      .select("*")
+      .select("*, last_shared_verified_at")
       .lt("crawl_error_count", 5)
       .order("last_crawled_at", { ascending: true, nullsFirst: true })
       .limit(MAX_NOVELS_PER_RUN);
@@ -34,7 +46,7 @@ serve(async (req) => {
       );
     }
 
-    // Filter to only novels that are actually bookmarked
+    // ブックマークされている小説のみ対象
     const novelIds = novels.map((n) => n.id);
     const { data: bookmarkedNovelIds } = await client
       .from("bookmarks")
@@ -44,29 +56,45 @@ serve(async (req) => {
     const bookmarkedSet = new Set(
       bookmarkedNovelIds?.map((b) => b.novel_id) ?? [],
     );
-    const targetNovels = novels.filter((n) => bookmarkedSet.has(n.id));
 
-    // Group by site
+    // 最終確認（クロール or 共有）が18時間以内の小説はスキップ
+    const targetNovels = novels.filter((n) => {
+      if (!bookmarkedSet.has(n.id)) return false;
+      const lastCrawled = n.last_crawled_at ? Date.parse(n.last_crawled_at) : 0;
+      const lastShared = n.last_shared_verified_at
+        ? Date.parse(n.last_shared_verified_at)
+        : 0;
+      return Math.max(lastCrawled, lastShared) < Date.now() - SKIP_WINDOW_MS;
+    });
+
+    const skippedCount =
+      novels.filter((n) => bookmarkedSet.has(n.id)).length - targetNovels.length;
+
     const narouNovels = targetNovels.filter((n) => n.site === "narou");
     const hamelnNovels = targetNovels.filter((n) => n.site === "hameln");
     const arcadiaNovels = targetNovels.filter((n) => n.site === "arcadia");
 
-    let updatedCount = 0;
-
-    // Process all sites in parallel
+    // 全サイトを並列処理 — この時点では通知しない
     const results = await Promise.allSettled([
       processNarou(client, narouNovels),
       processHameln(client, hamelnNovels),
       processArcadia(client, arcadiaNovels),
     ]);
 
+    const allUpdates: NovelUpdate[] = [];
+    let updatedCount = 0;
+
     for (const result of results) {
       if (result.status === "fulfilled") {
-        updatedCount += result.value;
+        updatedCount += result.value.count;
+        allUpdates.push(...result.value.updates);
       } else {
         console.error("Crawl batch error:", result.reason);
       }
     }
+
+    // 全クロール完了後に一括通知
+    const notifiedUserCount = await notifyBatch(client, allUpdates);
 
     const duration = Date.now() - startTime;
 
@@ -74,7 +102,9 @@ serve(async (req) => {
       JSON.stringify({
         message: "Crawl completed",
         processed: targetNovels.length,
+        skipped: skippedCount,
         updated: updatedCount,
+        notified_users: notifiedUserCount,
         duration_ms: duration,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -89,9 +119,10 @@ serve(async (req) => {
 });
 
 // deno-lint-ignore no-explicit-any
-async function processNarou(client: any, novels: any[]): Promise<number> {
-  if (novels.length === 0) return 0;
+async function processNarou(client: any, novels: any[]): Promise<{ count: number; updates: NovelUpdate[] }> {
+  if (novels.length === 0) return { count: 0, updates: [] };
 
+  const updates: NovelUpdate[] = [];
   let updatedCount = 0;
   const ncodes = novels.map((n) => n.site_novel_id);
   const narouData = await fetchNarouNovels(ncodes);
@@ -122,7 +153,6 @@ async function processNarou(client: any, novels: any[]): Promise<number> {
       .eq("id", novel.id);
 
     if (hasUpdate) {
-      // Insert new episode records (narou: generate from sequential numbers)
       const newEpisodes = [];
       for (let i = oldTotal + 1; i <= data.totalEpisodes; i++) {
         newEpisodes.push({
@@ -137,19 +167,23 @@ async function processNarou(client: any, novels: any[]): Promise<number> {
           .upsert(newEpisodes, { onConflict: "novel_id,site_episode_id" });
       }
 
-      novel.title = data.title;
-      await notifyUsers(client, novel, data.totalEpisodes);
+      updates.push({ novel: { ...novel, title: data.title }, newTotal: data.totalEpisodes });
       updatedCount++;
     }
 
-    await logCrawl(client, novel, "success", hasUpdate ? data.totalEpisodes - oldTotal : 0, null, Date.now() - logStart);
+    await logCrawl(
+      client, novel, "success",
+      hasUpdate ? data.totalEpisodes - oldTotal : 0,
+      null, Date.now() - logStart,
+    );
   }
 
-  return updatedCount;
+  return { count: updatedCount, updates };
 }
 
 // deno-lint-ignore no-explicit-any
-async function processHameln(client: any, novels: any[]): Promise<number> {
+async function processHameln(client: any, novels: any[]): Promise<{ count: number; updates: NovelUpdate[] }> {
+  const updates: NovelUpdate[] = [];
   let updatedCount = 0;
 
   for (const novel of novels) {
@@ -182,7 +216,6 @@ async function processHameln(client: any, novels: any[]): Promise<number> {
         .eq("id", novel.id);
 
       if (hasUpdate) {
-        // Insert episode records from crawler data
         const episodeRecords = data.episodes.map((ep) => ({
           novel_id: novel.id,
           site_episode_id: ep.siteEpisodeId,
@@ -195,33 +228,35 @@ async function processHameln(client: any, novels: any[]): Promise<number> {
             .upsert(episodeRecords, { onConflict: "novel_id,site_episode_id" });
         }
 
-        novel.title = data.title;
-        await notifyUsers(client, novel, data.totalEpisodes);
+        updates.push({ novel: { ...novel, title: data.title }, newTotal: data.totalEpisodes });
         updatedCount++;
       }
 
-      await logCrawl(client, novel, "success", hasUpdate ? data.totalEpisodes - oldTotal : 0, null, Date.now() - logStart);
+      await logCrawl(
+        client, novel, "success",
+        hasUpdate ? data.totalEpisodes - oldTotal : 0,
+        null, Date.now() - logStart,
+      );
     } catch (err) {
       await handleCrawlError(client, novel, String(err));
     }
 
-    // Rate limit: 3 seconds between requests
     await new Promise((resolve) => setTimeout(resolve, 3000));
   }
 
-  return updatedCount;
+  return { count: updatedCount, updates };
 }
 
 // deno-lint-ignore no-explicit-any
-async function processArcadia(client: any, novels: any[]): Promise<number> {
-  // Limit Arcadia crawling to once per 24 hours per novel to reduce server load
+async function processArcadia(client: any, novels: any[]): Promise<{ count: number; updates: NovelUpdate[] }> {
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const novelsToCrawl = novels.filter(
     (n) => !n.last_crawled_at || new Date(n.last_crawled_at) < cutoff,
   );
 
-  if (novelsToCrawl.length === 0) return 0;
+  if (novelsToCrawl.length === 0) return { count: 0, updates: [] };
 
+  const updates: NovelUpdate[] = [];
   let updatedCount = 0;
 
   for (const novel of novelsToCrawl) {
@@ -252,7 +287,6 @@ async function processArcadia(client: any, novels: any[]): Promise<number> {
         .eq("id", novel.id);
 
       if (hasUpdate) {
-        // Insert episode records from crawler data
         const episodeRecords = data.episodes.map((ep) => ({
           novel_id: novel.id,
           site_episode_id: ep.siteEpisodeId,
@@ -265,54 +299,97 @@ async function processArcadia(client: any, novels: any[]): Promise<number> {
             .upsert(episodeRecords, { onConflict: "novel_id,site_episode_id" });
         }
 
-        novel.title = data.title;
-        await notifyUsers(client, novel, data.totalEpisodes);
+        updates.push({ novel: { ...novel, title: data.title }, newTotal: data.totalEpisodes });
         updatedCount++;
       }
 
-      await logCrawl(client, novel, "success", hasUpdate ? data.totalEpisodes - oldTotal : 0, null, Date.now() - logStart);
+      await logCrawl(
+        client, novel, "success",
+        hasUpdate ? data.totalEpisodes - oldTotal : 0,
+        null, Date.now() - logStart,
+      );
     } catch (err) {
       await handleCrawlError(client, novel, String(err));
     }
 
-    // Rate limit: 5 seconds between requests (Arcadia is fragile)
     await new Promise((resolve) => setTimeout(resolve, 5000));
   }
 
-  return updatedCount;
+  return { count: updatedCount, updates };
 }
 
+/**
+ * 全クロール完了後に呼ぶ一括通知。
+ * ユーザーごとに「○件の小説が更新されました」を1通だけ送る。
+ */
 // deno-lint-ignore no-explicit-any
-async function notifyUsers(client: any, novel: any, newEpisodeCount: number) {
-  // Get all users who bookmarked this novel
+async function notifyBatch(client: any, updates: NovelUpdate[]): Promise<number> {
+  if (updates.length === 0) return 0;
+
+  const novelIds = updates.map((u) => u.novel.id);
+
   const { data: bookmarks } = await client
     .from("bookmarks")
-    .select("user_id")
-    .eq("novel_id", novel.id);
+    .select("user_id, novel_id")
+    .in("novel_id", novelIds);
 
-  if (!bookmarks || bookmarks.length === 0) return;
+  if (!bookmarks || bookmarks.length === 0) return 0;
 
-  const userIds = bookmarks.map((b: { user_id: string }) => b.user_id);
+  // novel_id → NovelUpdate のマップ
+  const updateMap = new Map<number, NovelUpdate>();
+  for (const u of updates) updateMap.set(u.novel.id, u);
 
-  const notificationPayload = {
-    title: "小説の更新があります",
-    body: `「${novel.title}」第${newEpisodeCount}話が公開されました`,
-  };
+  // ユーザーごとに関係する更新をグループ化
+  const userMap = new Map<string, BatchItem[]>();
+  for (const bm of bookmarks) {
+    const u = updateMap.get(bm.novel_id);
+    if (!u) continue;
+    if (!userMap.has(bm.user_id)) userMap.set(bm.user_id, []);
+    userMap.get(bm.user_id)!.push({
+      novel_id: u.novel.id,
+      title: u.novel.title,
+      new_total: u.newTotal,
+    });
+  }
 
-  const notifications = userIds.map((userId: string) => ({
-    user_id: userId,
-    type: "new_episode",
-    novel_id: novel.id,
-    ...notificationPayload,
-  }));
+  if (userMap.size === 0) return 0;
+
+  // ユーザーごとに1通の crawl_batch 通知を作成
+  const notifications = [];
+  for (const [userId, items] of userMap) {
+    const count = items.length;
+    const title = count === 1
+      ? "小説の更新があります"
+      : `${count}件の小説が更新されました`;
+    const body = count === 1
+      ? `「${items[0].title}」第${items[0].new_total}話が公開されました`
+      : items.slice(0, 3).map((i) => `「${i.title}」`).join("、") +
+        (count > 3 ? ` 他${count - 3}件` : "") + " が更新されました";
+
+    notifications.push({
+      user_id: userId,
+      type: "crawl_batch",
+      // 単体の場合は novel_id をセットしておく（詳細画面へのショートカット）
+      novel_id: count === 1 ? items[0].novel_id : null,
+      title,
+      body,
+      metadata: items,
+    });
+  }
 
   await client.from("notifications").insert(notifications);
 
-  // Send FCM push notifications
-  await sendFcmNotifications(client, userIds, notificationPayload, {
-    type: "new_episode",
-    novel_id: String(novel.id),
-  });
+  // FCM は各ユーザーへ個別送信
+  for (const notif of notifications) {
+    await sendFcmNotifications(
+      client,
+      [notif.user_id],
+      { title: notif.title, body: notif.body },
+      { type: "crawl_batch", count: String(notif.metadata.length) },
+    );
+  }
+
+  return userMap.size;
 }
 
 // deno-lint-ignore no-explicit-any
@@ -331,7 +408,10 @@ async function handleCrawlError(client: any, novel: any, errorMsg: string) {
 }
 
 // deno-lint-ignore no-explicit-any
-async function logCrawl(client: any, novel: any, status: string, episodesFound: number, errorMessage: string | null, durationMs: number) {
+async function logCrawl(
+  client: any, novel: any, status: string,
+  episodesFound: number, errorMessage: string | null, durationMs: number,
+) {
   await client.from("crawl_logs").insert({
     novel_id: novel.id,
     site: novel.site,
