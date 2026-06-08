@@ -20,10 +20,10 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Create .env
+      - name: Create .env files
         run: |
-          echo "SUPABASE_URL=https://placeholder.supabase.co" > .env
-          echo "SUPABASE_ANON_KEY=placeholder" >> .env
+          printf "SUPABASE_URL=https://placeholder.supabase.co\nSUPABASE_ANON_KEY=placeholder\n" > .env.development
+          cp .env.development .env.production
 
       - name: Analyze
         run: flutter analyze

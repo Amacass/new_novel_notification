@@ -88,7 +88,7 @@ class RegisterNovelService {
                 .eq('id', existingNovel.id)
                 .limit(1);
             if (updatedRows.isNotEmpty) {
-              return (Novel.fromJson(updatedRows.first as Map<String, dynamic>), false);
+              return (Novel.fromJson(updatedRows.first), false);
             }
           }
         }
@@ -120,7 +120,7 @@ class RegisterNovelService {
         .limit(1);
 
     if (rows.isEmpty) throw Exception('小説の登録に失敗しました');
-    return (Novel.fromJson(rows.first as Map<String, dynamic>), true);
+    return (Novel.fromJson(rows.first), true);
   }
 
   Future<Map<String, dynamic>?> _fetchMetadata(
