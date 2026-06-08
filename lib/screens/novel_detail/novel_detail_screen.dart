@@ -5,9 +5,11 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../config/theme.dart';
 import '../../models/bookmark.dart';
 import '../../models/novel.dart';
+import '../../providers/amazon_link_provider.dart';
 import '../../providers/bookmark_provider.dart';
 import '../../providers/novel_provider.dart';
 import '../../providers/stamp_provider.dart';
+import '../../utils/error_message.dart';
 import '../../widgets/category_pick_sheet.dart';
 import '../../widgets/rating_stars.dart';
 import '../../widgets/site_badge.dart';
@@ -466,6 +468,34 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen>
                     ),
                 ],
 
+                // Amazon links
+                ...ref
+                    .watch(novelAmazonLinksProvider(widget.novelId))
+                    .maybeWhen(
+                      data: (links) => links.isEmpty
+                          ? []
+                          : [
+                              _SectionTitle(title: 'Amazonで購入'),
+                              ...links.map(
+                                (link) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton.icon(
+                                      icon: const Icon(Icons.open_in_new,
+                                          size: 18),
+                                      label: Text(
+                                          '${link.label}（外部サイト: Amazon）↗'),
+                                      onPressed: () => _openUrl(link.url),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                            ],
+                      orElse: () => [],
+                    ),
+
                 // Open in browser
                 SizedBox(
                   width: double.infinity,
@@ -485,7 +515,7 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen>
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('エラー: $error')),
+        error: (error, _) => Center(child: Text(errorMessage(error))),
       ),
     );
   }

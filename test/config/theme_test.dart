@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:novel_notification/config/theme.dart';
+import 'package:novelmark/config/theme.dart';
 
 void main() {
   group('AppTheme', () {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/category.dart';
 import '../providers/category_provider.dart';
+import '../utils/error_message.dart';
 
 enum CategoryPickMode { assign, filter }
 
@@ -143,7 +144,7 @@ class _CategoryPickSheetState extends ConsumerState<CategoryPickSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('作成に失敗しました: $e')),
+          SnackBar(content: Text('作成に失敗しました: ${errorMessage(e)}')),
         );
       }
     }
@@ -407,7 +408,7 @@ class _CategoryPickSheetState extends ConsumerState<CategoryPickSheet> {
                   },
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
-                  error: (e, _) => Center(child: Text('エラー: $e')),
+                  error: (e, _) => Center(child: Text(errorMessage(e))),
                 ),
               ),
 

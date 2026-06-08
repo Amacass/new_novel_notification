@@ -7,6 +7,7 @@ import '../../models/bookmark.dart';
 import '../../models/novel.dart';
 import '../../providers/bookmark_provider.dart';
 import '../../providers/stamp_provider.dart';
+import '../../utils/error_message.dart';
 import '../../widgets/bookshelf_card.dart';
 import '../../widgets/category_pick_sheet.dart';
 import '../../widgets/site_badge.dart';
@@ -326,7 +327,7 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
               },
               loading: () =>
                   const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('エラー: $e')),
+              error: (e, _) => Center(child: Text(errorMessage(e))),
             ),
           ),
         ],

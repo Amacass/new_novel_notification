@@ -5,7 +5,9 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
+import '../../utils/error_message.dart';
 import '../legal/legal_screen.dart';
+import 'widgets/backup_section.dart';
 
 final _packageInfoProvider = FutureProvider<PackageInfo>(
   (_) => PackageInfo.fromPlatform(),
@@ -49,24 +51,7 @@ class SettingsScreen extends ConsumerWidget {
 
           // Data section
           _SectionHeader(title: 'データ'),
-          ListTile(
-            leading: Icon(Icons.upload_outlined,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-            title: Text('データエクスポート',
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            subtitle: const Text('以後のバージョンにて対応予定'),
-            enabled: false,
-          ),
-          ListTile(
-            leading: Icon(Icons.download_outlined,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-            title: Text('データインポート',
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            subtitle: const Text('以後のバージョンにて対応予定'),
-            enabled: false,
-          ),
+          const BackupSection(),
 
           const Divider(),
 
@@ -203,7 +188,7 @@ class SettingsScreen extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('削除に失敗しました: $e')),
+          SnackBar(content: Text('削除に失敗しました: ${errorMessage(e)}')),
         );
       }
     }

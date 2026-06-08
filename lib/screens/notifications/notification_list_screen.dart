@@ -5,6 +5,7 @@ import 'package:timeago/timeago.dart' as timeago;
 
 import '../../models/app_notification.dart';
 import '../../providers/notification_provider.dart';
+import '../../utils/error_message.dart';
 
 class NotificationListScreen extends ConsumerWidget {
   const NotificationListScreen({super.key});
@@ -75,7 +76,7 @@ class NotificationListScreen extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('エラー: $error')),
+        error: (error, _) => Center(child: Text(errorMessage(error))),
       ),
     );
   }

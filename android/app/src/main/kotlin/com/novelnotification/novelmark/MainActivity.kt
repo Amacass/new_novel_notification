@@ -1,4 +1,4 @@
-package com.novelnotification.novel_notification
+package com.novelnotification.novelmark
 
 import io.flutter.embedding.android.FlutterActivity
 

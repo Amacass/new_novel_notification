@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:novel_notification/models/novel.dart';
-import 'package:novel_notification/widgets/site_badge.dart';
+import 'package:novelmark/models/novel.dart';
+import 'package:novelmark/widgets/site_badge.dart';
 
 void main() {
   Widget buildTestWidget(NovelSite site) {
