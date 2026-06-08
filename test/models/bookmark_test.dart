@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:novel_notification/models/bookmark.dart';
-import 'package:novel_notification/models/novel.dart';
+import 'package:novelmark/models/bookmark.dart';
+import 'package:novelmark/models/novel.dart';
 
 void main() {
   final baseNovelJson = {
