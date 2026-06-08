@@ -56,3 +56,5 @@ jobs:
           functions/check-new-novels/index.ts
           functions/check-legal-updates/index.ts
           functions/record-consent/index.ts
+          functions/moderate-recommendations/index.ts
+          functions/compute-recommend-rankings/index.ts

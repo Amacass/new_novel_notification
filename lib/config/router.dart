@@ -6,6 +6,7 @@ import '../providers/auth_provider.dart';
 import '../providers/bookmark_provider.dart';
 import '../providers/charm_tag_provider.dart';
 import '../providers/notification_provider.dart';
+import '../providers/recommendation_provider.dart';
 import '../providers/stamp_provider.dart';
 import '../providers/triage_provider.dart';
 import '../screens/splash/splash_screen.dart';
@@ -17,6 +18,7 @@ import '../screens/bookshelf/bookshelf_screen.dart';
 import '../screens/novel_detail/novel_detail_screen.dart';
 import '../screens/authors/favorite_authors_screen.dart';
 import '../screens/notifications/notification_list_screen.dart';
+import '../screens/recommend/recommend_screen.dart';
 import '../screens/settings/settings_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -71,6 +73,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const FavoriteAuthorsScreen(),
           ),
           GoRoute(
+            path: '/recommend',
+            builder: (context, state) => const RecommendScreen(),
+          ),
+          GoRoute(
             path: '/settings',
             builder: (context, state) => const SettingsScreen(),
           ),
@@ -109,61 +115,95 @@ final routerProvider = Provider<GoRouter>((ref) {
   return router;
 });
 
-class MainShell extends StatelessWidget {
+class MainShell extends ConsumerWidget {
   final Widget child;
 
   const MainShell({super.key, required this.child});
 
-  static int _calculateSelectedIndex(BuildContext context) {
-    final location = GoRouterState.of(context).matchedLocation;
-    if (location.startsWith('/timeline')) return 0;
-    if (location.startsWith('/home')) return 1;
-    if (location.startsWith('/bookshelf')) return 2;
-    if (location.startsWith('/settings')) return 3;
-    return 0;
-  }
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final showRecommend = ref.watch(recommendSettingsProvider).maybeWhen(
+          data: (s) => s.viewEnabled,
+          orElse: () => false,
+        );
+
+    final routes = _buildRoutes(showRecommend);
+    final location = GoRouterState.of(context).matchedLocation;
+    final selectedIndex = _selectedIndex(location, showRecommend);
+
     return Scaffold(
       body: child,
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _calculateSelectedIndex(context),
-        onDestinationSelected: (index) {
-          switch (index) {
-            case 0:
-              context.go('/timeline');
-            case 1:
-              context.go('/home');
-            case 2:
-              context.go('/bookshelf');
-            case 3:
-              context.go('/settings');
-          }
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.update_outlined),
-            selectedIcon: Icon(Icons.update),
-            label: 'タイムライン',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.inbox_outlined),
-            selectedIcon: Icon(Icons.inbox),
-            label: 'デスク',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.library_books_outlined),
-            selectedIcon: Icon(Icons.library_books),
-            label: '本棚',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: '設定',
-          ),
-        ],
+        selectedIndex: selectedIndex,
+        onDestinationSelected: (i) => context.go(routes[i].path),
+        destinations: routes.map((r) => r.destination).toList(),
       ),
     );
   }
+}
+
+class _NavRoute {
+  final String path;
+  final NavigationDestination destination;
+
+  const _NavRoute({required this.path, required this.destination});
+}
+
+List<_NavRoute> _buildRoutes(bool showRecommend) {
+  return [
+    const _NavRoute(
+      path: '/timeline',
+      destination: NavigationDestination(
+        icon: Icon(Icons.update_outlined),
+        selectedIcon: Icon(Icons.update),
+        label: 'タイムライン',
+      ),
+    ),
+    const _NavRoute(
+      path: '/home',
+      destination: NavigationDestination(
+        icon: Icon(Icons.inbox_outlined),
+        selectedIcon: Icon(Icons.inbox),
+        label: 'デスク',
+      ),
+    ),
+    const _NavRoute(
+      path: '/bookshelf',
+      destination: NavigationDestination(
+        icon: Icon(Icons.library_books_outlined),
+        selectedIcon: Icon(Icons.library_books),
+        label: '本棚',
+      ),
+    ),
+    if (showRecommend)
+      const _NavRoute(
+        path: '/recommend',
+        destination: NavigationDestination(
+          icon: Icon(Icons.recommend_outlined),
+          selectedIcon: Icon(Icons.recommend),
+          label: 'おすすめ',
+        ),
+      ),
+    const _NavRoute(
+      path: '/settings',
+      destination: NavigationDestination(
+        icon: Icon(Icons.settings_outlined),
+        selectedIcon: Icon(Icons.settings),
+        label: '設定',
+      ),
+    ),
+  ];
+}
+
+int _selectedIndex(String location, bool showRecommend) {
+  if (location.startsWith('/timeline')) return 0;
+  if (location.startsWith('/home')) return 1;
+  if (location.startsWith('/bookshelf')) return 2;
+  if (showRecommend) {
+    if (location.startsWith('/recommend')) return 3;
+    if (location.startsWith('/settings')) return 4;
+  } else {
+    if (location.startsWith('/settings')) return 3;
+  }
+  return 0;
 }

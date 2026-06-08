@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../config/supabase.dart';
 import '../../config/theme.dart';
 import '../../models/bookmark.dart';
 import '../../models/novel.dart';
+import '../../models/recommendation.dart';
 import '../../providers/amazon_link_provider.dart';
 import '../../providers/bookmark_provider.dart';
 import '../../providers/novel_provider.dart';
+import '../../providers/recommendation_provider.dart';
 import '../../providers/stamp_provider.dart';
 import '../../utils/error_message.dart';
 import '../../widgets/category_pick_sheet.dart';
@@ -15,6 +18,7 @@ import '../../widgets/rating_stars.dart';
 import '../../widgets/site_badge.dart';
 import '../../widgets/tier_badge.dart';
 import '../../widgets/tier_change_sheet.dart';
+import '../recommend/widgets/recommendation_card.dart';
 import '../stamp/stamp_sheet.dart';
 
 class NovelDetailScreen extends ConsumerStatefulWidget {
@@ -509,6 +513,14 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen>
                     },
                   ),
                 ),
+                const SizedBox(height: 16),
+
+                // Recommendations section
+                _RecommendSection(
+                  novelId: widget.novelId,
+                  novel: novel,
+                  bookmark: bookmark,
+                ),
                 const SizedBox(height: 32),
               ],
             ),
@@ -741,5 +753,384 @@ class _TextEditSheet extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// ============================================================
+// おすすめセクション（小説詳細画面用）
+// ============================================================
+
+class _RecommendSection extends ConsumerWidget {
+  final int novelId;
+  final Novel novel;
+  final Bookmark? bookmark;
+
+  const _RecommendSection({
+    required this.novelId,
+    required this.novel,
+    required this.bookmark,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(recommendSettingsProvider).valueOrNull;
+    final myRec = ref.watch(myNovelRecommendationProvider(novelId)).valueOrNull;
+    final publicRecs =
+        ref.watch(novelRecommendationsProvider(novelId)).valueOrNull ?? [];
+
+    final canCreate = (settings?.createEnabled ?? false) &&
+        bookmark != null &&
+        (bookmark!.tier == 2 || bookmark!.tier == 3);
+
+    final showCreate = settings?.createEnabled ?? false;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            'おすすめ',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+        ),
+
+        if (showCreate)
+          if (canCreate)
+            _RecommendForm(novelId: novelId, existing: myRec)
+          else if (bookmark != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                '殿堂入り・良作に分類するとおすすめを書けます',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Colors.grey),
+              ),
+            ),
+
+        if (publicRecs.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Text('まだおすすめがありません',
+                style: TextStyle(color: Colors.grey, fontSize: 13)),
+          )
+        else
+          ...publicRecs.map(
+            (rec) => RecommendationCard(
+              rec: rec,
+              onTap: null,
+              onLike: () async {
+                final userId = supabase.auth.currentUser?.id;
+                if (userId == null) return;
+                final liked = rec.isLikedByMe ?? false;
+                if (liked) {
+                  await supabase
+                      .from('recommendation_likes')
+                      .delete()
+                      .eq('recommendation_id', rec.id)
+                      .eq('user_id', userId);
+                } else {
+                  await supabase.from('recommendation_likes').insert({
+                    'recommendation_id': rec.id,
+                    'user_id': userId,
+                  });
+                }
+                ref.invalidate(novelRecommendationsProvider(novelId));
+              },
+              onReport: () => _showReportSheet(context, rec),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _showReportSheet(BuildContext context, Recommendation rec) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => _SimpleReportSheet(rec: rec),
+    );
+  }
+}
+
+class _SimpleReportSheet extends StatefulWidget {
+  final Recommendation rec;
+
+  const _SimpleReportSheet({required this.rec});
+
+  @override
+  State<_SimpleReportSheet> createState() => _SimpleReportSheetState();
+}
+
+class _SimpleReportSheetState extends State<_SimpleReportSheet> {
+  String? _reason;
+  bool _submitting = false;
+
+  static const _reasons = [
+    ('r18',        'R18・性的表現'),
+    ('ad',         '広告・スパム'),
+    ('harassment', '誹謗中傷・アンチ'),
+    ('off_topic',  '感想と無関係'),
+    ('other',      'その他'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('通報', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          RadioGroup<String>(
+            groupValue: _reason,
+            onChanged: (v) => setState(() => _reason = v),
+            child: Column(
+              children: _reasons.map(
+                (r) => RadioListTile<String>(
+                  value: r.$1,
+                  title: Text(r.$2),
+                  dense: true,
+                ),
+              ).toList(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _reason == null || _submitting ? null : _submit,
+              child: _submitting
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('通報する'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submit() async {
+    if (_reason == null) return;
+    setState(() => _submitting = true);
+    try {
+      await supabase.from('recommendation_reports').insert({
+        'recommendation_id': widget.rec.id,
+        'reason': _reason,
+      });
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('通報を受け付けました')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('通報に失敗しました: ${errorMessage(e)}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+}
+
+class _RecommendForm extends ConsumerStatefulWidget {
+  final int novelId;
+  final Recommendation? existing;
+
+  const _RecommendForm({required this.novelId, this.existing});
+
+  @override
+  ConsumerState<_RecommendForm> createState() => _RecommendFormState();
+}
+
+class _RecommendFormState extends ConsumerState<_RecommendForm> {
+  late final TextEditingController _headingCtrl;
+  late final TextEditingController _bodyCtrl;
+  bool _isPublic = true;
+  bool _submitting = false;
+  bool _expanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _headingCtrl = TextEditingController(text: widget.existing?.heading ?? '');
+    _bodyCtrl = TextEditingController(text: widget.existing?.body ?? '');
+    _isPublic = widget.existing?.isPublic ?? true;
+    _expanded = widget.existing != null;
+  }
+
+  @override
+  void dispose() {
+    _headingCtrl.dispose();
+    _bodyCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _hasExisting => widget.existing != null;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_expanded && !_hasExisting) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: OutlinedButton.icon(
+          icon: const Icon(Icons.recommend_outlined),
+          label: const Text('この作品をおすすめする'),
+          onPressed: () => setState(() => _expanded = true),
+        ),
+      );
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _hasExisting ? '自分のおすすめ' : 'おすすめを投稿',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _headingCtrl,
+              maxLength: 60,
+              decoration: const InputDecoration(
+                labelText: '見出し（60文字以内）',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _bodyCtrl,
+              maxLines: 4,
+              minLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'おすすめコメント',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Switch(
+                  value: _isPublic,
+                  onChanged: (v) => setState(() => _isPublic = v),
+                ),
+                Text(_isPublic ? '公開' : '非公開'),
+                const Spacer(),
+                if (_hasExisting)
+                  TextButton(
+                    onPressed: _submitting ? null : _delete,
+                    child: Text('削除',
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.error)),
+                  ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _submitting ? null : _submit,
+                  child: _submitting
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(_hasExisting ? '更新' : '投稿'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '投稿後は審査中になります。承認後に公開されます。',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submit() async {
+    final heading = _headingCtrl.text.trim();
+    final body = _bodyCtrl.text.trim();
+    if (heading.isEmpty || body.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('見出しとコメントを入力してください')),
+      );
+      return;
+    }
+
+    setState(() => _submitting = true);
+    try {
+      if (_hasExisting) {
+        await supabase.from('recommendations').update({
+          'heading': heading,
+          'body': body,
+          'is_public': _isPublic,
+        }).eq('id', widget.existing!.id);
+      } else {
+        await supabase.from('recommendations').insert({
+          'novel_id': widget.novelId,
+          'heading': heading,
+          'body': body,
+          'is_public': _isPublic,
+        });
+      }
+      ref.invalidate(myNovelRecommendationProvider(widget.novelId));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(_hasExisting
+                  ? 'おすすめを更新しました（再審査中）'
+                  : 'おすすめを投稿しました（審査中）')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('エラー: ${errorMessage(e)}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _delete() async {
+    setState(() => _submitting = true);
+    try {
+      await supabase
+          .from('recommendations')
+          .delete()
+          .eq('id', widget.existing!.id);
+      ref.invalidate(myNovelRecommendationProvider(widget.novelId));
+      ref.invalidate(novelRecommendationsProvider(widget.novelId));
+      if (mounted) setState(() => _expanded = false);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('削除に失敗しました: ${errorMessage(e)}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 }
