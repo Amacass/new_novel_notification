@@ -23,6 +23,10 @@ CREATE POLICY "Active links viewable by authenticated"
   ON amazon_links FOR SELECT TO authenticated
   USING (is_active = true);
 
+CREATE OR REPLACE FUNCTION set_updated_at()
+  RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN NEW.updated_at = now(); RETURN NEW; END; $$;
+
 CREATE TRIGGER amazon_links_updated_at
   BEFORE UPDATE ON amazon_links
-  FOR EACH ROW EXECUTE FUNCTION moddatetime(updated_at);
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
