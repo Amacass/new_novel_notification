@@ -266,7 +266,7 @@ class BackupService {
     final tags = _requireList(data, 'user_charm_tags', 'トップレベル');
     if (tags.length > _kMaxCharmTags) {
       throw BackupValidationException(
-          'user_charm_tagsが多すぎます（上限${_kMaxCharmTags}件）。');
+          'user_charm_tagsが多すぎます（上限$_kMaxCharmTags件）。');
     }
     for (var i = 0; i < tags.length; i++) {
       _validateCharmTag(tags[i], i);
@@ -276,7 +276,7 @@ class BackupService {
     final bookmarks = _requireList(data, 'bookmarks', 'トップレベル');
     if (bookmarks.length > _kMaxBookmarks) {
       throw BackupValidationException(
-          'bookmarksが多すぎます（上限${_kMaxBookmarks}件）。');
+          'bookmarksが多すぎます（上限$_kMaxBookmarks件）。');
     }
 
     var totalStamps = 0;
@@ -286,7 +286,7 @@ class BackupService {
     }
     if (totalStamps > _kMaxStampsTotal) {
       throw BackupValidationException(
-          'スタンプの合計が多すぎます（上限${_kMaxStampsTotal}件）。');
+          'スタンプの合計が多すぎます（上限$_kMaxStampsTotal件）。');
     }
   }
 
@@ -348,7 +348,7 @@ class BackupService {
     // stamps
     final stamps = _requireList(bm, 'stamps', ctx);
     if (stamps.length > _kMaxStampsPerBookmark) {
-      throw BackupValidationException('$ctx.stamps が多すぎます（上限${_kMaxStampsPerBookmark}件）。');
+      throw BackupValidationException('$ctx.stamps が多すぎます（上限$_kMaxStampsPerBookmark件）。');
     }
     for (var i = 0; i < stamps.length; i++) {
       _validateStamp(stamps[i], '$ctx.stamps[$i]');
@@ -386,7 +386,7 @@ class BackupService {
 
     final tags = _requireList(stamp, 'charm_tags', ctx);
     if (tags.length > _kMaxTagsPerStamp) {
-      throw BackupValidationException('$ctx.charm_tags が多すぎます（上限${_kMaxTagsPerStamp}件）。');
+      throw BackupValidationException('$ctx.charm_tags が多すぎます（上限$_kMaxTagsPerStamp件）。');
     }
     for (final t in tags) {
       if (t is! String || t.isEmpty || t.length > 50) {
