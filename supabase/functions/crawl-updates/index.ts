@@ -407,8 +407,8 @@ async function handleCrawlError(client: any, novel: any, errorMsg: string) {
   await logCrawl(client, novel, "error", 0, errorMsg, 0);
 }
 
-// deno-lint-ignore no-explicit-any
 async function logCrawl(
+  // deno-lint-ignore no-explicit-any
   client: any, novel: any, status: string,
   episodesFound: number, errorMessage: string | null, durationMs: number,
 ) {

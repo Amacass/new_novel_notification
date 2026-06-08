@@ -1,5 +1,4 @@
 import {
-  decode as base64UrlDecode,
   encode as base64UrlEncode,
 } from "https://deno.land/std@0.168.0/encoding/base64url.ts";
 
