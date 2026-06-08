@@ -1087,6 +1087,7 @@ class _RecommendFormState extends ConsumerState<_RecommendForm> {
         }).eq('id', widget.existing!.id);
       } else {
         await supabase.from('recommendations').insert({
+          'user_id': supabase.auth.currentUser!.id,
           'novel_id': widget.novelId,
           'heading': heading,
           'body': body,
