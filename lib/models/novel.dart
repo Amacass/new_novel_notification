@@ -80,14 +80,40 @@ class Novel {
     required this.updatedAt,
   });
 
+  String episodeUrl(int episode) {
+    switch (site) {
+      case NovelSite.narou:
+        return '$url$episode/';
+      case NovelSite.hameln:
+        return '$url$episode.html';
+      case NovelSite.arcadia:
+        // Ensure act=dump is present for per-episode navigation
+        final arcadiaBase = url.contains('act=dump')
+            ? url
+            : url.replaceFirst('sst.php?', 'sst.php?act=dump&');
+        return '$arcadiaBase&n=$episode';
+    }
+  }
+
+  static String? _decode(String? s) {
+    if (s == null) return null;
+    return s
+        .replaceAll('&amp;', '&')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&apos;', "'")
+        .replaceAll('&#39;', "'")
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>');
+  }
+
   factory Novel.fromJson(Map<String, dynamic> json) {
     return Novel(
       id: json['id'] as int,
       site: NovelSite.values.firstWhere((e) => e.name == json['site']),
       siteNovelId: json['site_novel_id'] as String,
       url: json['url'] as String,
-      title: json['title'] as String?,
-      authorName: json['author_name'] as String?,
+      title: _decode(json['title'] as String?),
+      authorName: _decode(json['author_name'] as String?),
       authorId: json['author_id'] as int?,
       synopsis: json['synopsis'] as String?,
       totalEpisodes: json['total_episodes'] as int? ?? 0,

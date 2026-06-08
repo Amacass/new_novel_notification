@@ -1,7 +1,7 @@
 name: novelmark
 description: "Web小説更新通知アプリ"
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.2+3
 
 environment:
   sdk: ^3.11.0
@@ -48,6 +48,14 @@ dependencies:
   path_provider: ^2.1.0
   file_picker: ^8.1.0
 
+  # App version
+  package_info_plus: ^8.0.0
+
+  # Push Notifications (Firebase)
+  firebase_core: ^3.0.0
+  firebase_messaging: ^15.0.0
+  flutter_local_notifications: ^18.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -58,8 +66,24 @@ dev_dependencies:
   build_runner: ^2.4.0
   json_serializable: ^6.9.0
 
+  # App Icon Generation
+  flutter_launcher_icons: ^0.14.3
+
 flutter:
   uses-material-design: true
 
   assets:
-    - .env
+    - .env.development
+    - .env.production
+    - docs/privacy_policy.md
+    - docs/terms_of_service.md
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  macos:
+    generate: true
+    image_path: "docs/icon/novelmark_icon_1024.png"
+  image_path: "docs/icon/novelmark_icon_1024.png"
+  min_sdk_android: 21

@@ -4,6 +4,7 @@ import { createServiceClient } from "../_shared/supabase-client.ts";
 import { fetchNarouNovels } from "../_shared/crawlers/narou.ts";
 import { fetchHamelnNovel } from "../_shared/crawlers/hameln.ts";
 import { fetchArcadiaNovel } from "../_shared/crawlers/arcadia.ts";
+import { sendFcmNotifications } from "../_shared/fcm.ts";
 
 const MAX_NOVELS_PER_RUN = 50;
 
@@ -104,7 +105,8 @@ async function processNarou(client: any, novels: any[]): Promise<number> {
       continue;
     }
 
-    const hasUpdate = data.totalEpisodes > (novel.total_episodes ?? 0);
+    const oldTotal = novel.total_episodes ?? 0;
+    const hasUpdate = data.totalEpisodes > oldTotal;
 
     await client
       .from("novels")
@@ -120,11 +122,27 @@ async function processNarou(client: any, novels: any[]): Promise<number> {
       .eq("id", novel.id);
 
     if (hasUpdate) {
+      // Insert new episode records (narou: generate from sequential numbers)
+      const newEpisodes = [];
+      for (let i = oldTotal + 1; i <= data.totalEpisodes; i++) {
+        newEpisodes.push({
+          novel_id: novel.id,
+          site_episode_id: String(i),
+          episode_number: i,
+        });
+      }
+      if (newEpisodes.length > 0) {
+        await client
+          .from("episodes")
+          .upsert(newEpisodes, { onConflict: "novel_id,site_episode_id" });
+      }
+
+      novel.title = data.title;
       await notifyUsers(client, novel, data.totalEpisodes);
       updatedCount++;
     }
 
-    await logCrawl(client, novel, "success", hasUpdate ? data.totalEpisodes - (novel.total_episodes ?? 0) : 0, null, Date.now() - logStart);
+    await logCrawl(client, novel, "success", hasUpdate ? data.totalEpisodes - oldTotal : 0, null, Date.now() - logStart);
   }
 
   return updatedCount;
@@ -145,7 +163,8 @@ async function processHameln(client: any, novels: any[]): Promise<number> {
         continue;
       }
 
-      const hasUpdate = data.totalEpisodes > (novel.total_episodes ?? 0);
+      const oldTotal = novel.total_episodes ?? 0;
+      const hasUpdate = data.totalEpisodes > oldTotal;
 
       await client
         .from("novels")
@@ -155,6 +174,7 @@ async function processHameln(client: any, novels: any[]): Promise<number> {
           total_episodes: data.totalEpisodes,
           latest_episode_id: data.latestEpisodeId,
           latest_episode_title: data.latestEpisodeTitle,
+          site_updated_at: data.latestUpdatedAt,
           last_crawled_at: new Date().toISOString(),
           crawl_error_count: 0,
           updated_at: new Date().toISOString(),
@@ -162,11 +182,25 @@ async function processHameln(client: any, novels: any[]): Promise<number> {
         .eq("id", novel.id);
 
       if (hasUpdate) {
+        // Insert episode records from crawler data
+        const episodeRecords = data.episodes.map((ep) => ({
+          novel_id: novel.id,
+          site_episode_id: ep.siteEpisodeId,
+          episode_number: ep.episodeNumber,
+          title: ep.title ?? null,
+        }));
+        if (episodeRecords.length > 0) {
+          await client
+            .from("episodes")
+            .upsert(episodeRecords, { onConflict: "novel_id,site_episode_id" });
+        }
+
+        novel.title = data.title;
         await notifyUsers(client, novel, data.totalEpisodes);
         updatedCount++;
       }
 
-      await logCrawl(client, novel, "success", hasUpdate ? data.totalEpisodes - (novel.total_episodes ?? 0) : 0, null, Date.now() - logStart);
+      await logCrawl(client, novel, "success", hasUpdate ? data.totalEpisodes - oldTotal : 0, null, Date.now() - logStart);
     } catch (err) {
       await handleCrawlError(client, novel, String(err));
     }
@@ -180,9 +214,17 @@ async function processHameln(client: any, novels: any[]): Promise<number> {
 
 // deno-lint-ignore no-explicit-any
 async function processArcadia(client: any, novels: any[]): Promise<number> {
+  // Limit Arcadia crawling to once per 24 hours per novel to reduce server load
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const novelsToCrawl = novels.filter(
+    (n) => !n.last_crawled_at || new Date(n.last_crawled_at) < cutoff,
+  );
+
+  if (novelsToCrawl.length === 0) return 0;
+
   let updatedCount = 0;
 
-  for (const novel of novels) {
+  for (const novel of novelsToCrawl) {
     const logStart = Date.now();
 
     try {
@@ -193,7 +235,8 @@ async function processArcadia(client: any, novels: any[]): Promise<number> {
         continue;
       }
 
-      const hasUpdate = data.totalEpisodes > (novel.total_episodes ?? 0);
+      const oldTotal = novel.total_episodes ?? 0;
+      const hasUpdate = data.totalEpisodes > oldTotal;
 
       await client
         .from("novels")
@@ -209,11 +252,25 @@ async function processArcadia(client: any, novels: any[]): Promise<number> {
         .eq("id", novel.id);
 
       if (hasUpdate) {
+        // Insert episode records from crawler data
+        const episodeRecords = data.episodes.map((ep) => ({
+          novel_id: novel.id,
+          site_episode_id: ep.siteEpisodeId,
+          episode_number: ep.episodeNumber,
+          title: ep.title ?? null,
+        }));
+        if (episodeRecords.length > 0) {
+          await client
+            .from("episodes")
+            .upsert(episodeRecords, { onConflict: "novel_id,site_episode_id" });
+        }
+
+        novel.title = data.title;
         await notifyUsers(client, novel, data.totalEpisodes);
         updatedCount++;
       }
 
-      await logCrawl(client, novel, "success", hasUpdate ? data.totalEpisodes - (novel.total_episodes ?? 0) : 0, null, Date.now() - logStart);
+      await logCrawl(client, novel, "success", hasUpdate ? data.totalEpisodes - oldTotal : 0, null, Date.now() - logStart);
     } catch (err) {
       await handleCrawlError(client, novel, String(err));
     }
@@ -235,15 +292,27 @@ async function notifyUsers(client: any, novel: any, newEpisodeCount: number) {
 
   if (!bookmarks || bookmarks.length === 0) return;
 
-  const notifications = bookmarks.map((b: { user_id: string }) => ({
-    user_id: b.user_id,
-    type: "new_episode",
-    novel_id: novel.id,
+  const userIds = bookmarks.map((b: { user_id: string }) => b.user_id);
+
+  const notificationPayload = {
     title: "小説の更新があります",
     body: `「${novel.title}」第${newEpisodeCount}話が公開されました`,
+  };
+
+  const notifications = userIds.map((userId: string) => ({
+    user_id: userId,
+    type: "new_episode",
+    novel_id: novel.id,
+    ...notificationPayload,
   }));
 
   await client.from("notifications").insert(notifications);
+
+  // Send FCM push notifications
+  await sendFcmNotifications(client, userIds, notificationPayload, {
+    type: "new_episode",
+    novel_id: String(novel.id),
+  });
 }
 
 // deno-lint-ignore no-explicit-any

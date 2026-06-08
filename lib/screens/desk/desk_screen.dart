@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../providers/bookmark_provider.dart';
 import '../../providers/triage_provider.dart';
-import '../../screens/stamp/stamp_sheet.dart';
 import '../../utils/haptics.dart';
 import 'widgets/card_counter.dart';
 import 'widgets/card_stack.dart';
@@ -37,33 +36,6 @@ class _DeskScreenState extends ConsumerState<DeskScreen> {
       if (mounted) setState(() => _receivingTier = null);
     });
 
-    // Stamp nudge for high-tier sorts
-    if (tier >= 2) {
-      final triageState = ref.read(triageProvider);
-      final currentIdx = triageState.currentIndex - 1;
-      if (currentIdx >= 0 && currentIdx < triageState.cards.length) {
-        final sortedBookmark = triageState.cards[currentIdx];
-        final novelId = sortedBookmark.novelId;
-        Future.delayed(const Duration(milliseconds: 600), () {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('スタンプを付けますか？（あとでもOK）'),
-              backgroundColor: Colors.black87,
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 3),
-              action: SnackBarAction(
-                label: 'つける',
-                textColor: Colors.amber,
-                onPressed: () {
-                  StampSheet.show(context, novelId: novelId);
-                },
-              ),
-            ),
-          );
-        });
-      }
-    }
   }
 
   /// Tray tap: if the last card was just sorted to this tray, undo it.
@@ -297,12 +269,6 @@ class _DeskScreenState extends ConsumerState<DeskScreen> {
                         child: CompletionOverlay(
                           sortCounts: _sessionSortCounts,
                           totalSorted: triageState.total,
-                          onNewSession: () {
-                            _sessionSortCounts.updateAll((_, _) => 0);
-                            ref
-                                .read(triageProvider.notifier)
-                                .startNewSession();
-                          },
                           onGoToBookshelf: () {
                             context.go('/bookshelf');
                           },

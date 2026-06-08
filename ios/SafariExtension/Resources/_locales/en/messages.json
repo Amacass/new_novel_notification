@@ -1,0 +1,10 @@
+{
+    "extension_name": {
+        "message": "Novelmark",
+        "description": "The display name for the extension."
+    },
+    "extension_description": {
+        "message": "なろう・ハーメルン・ArcadiaのページをNovelmarkに登録します。",
+        "description": "Description of what the extension does."
+    }
+}

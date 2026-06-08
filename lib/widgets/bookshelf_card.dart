@@ -7,11 +7,15 @@ import '../widgets/tier_badge.dart';
 class BookshelfCard extends StatelessWidget {
   final Bookmark bookmark;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onReadTap;
 
   const BookshelfCard({
     super.key,
     required this.bookmark,
     this.onTap,
+    this.onLongPress,
+    this.onReadTap,
   });
 
   @override
@@ -23,6 +27,7 @@ class BookshelfCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -80,13 +85,45 @@ class BookshelfCard extends StatelessWidget {
                               ),
                             ),
                           ),
+                        if (bookmark.categories.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          ...bookmark.categories.take(3).map(
+                                (cat) => Padding(
+                                  padding: const EdgeInsets.only(right: 3),
+                                  child: Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: BoxDecoration(
+                                      color: cat.colorValue,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          if (bookmark.categories.length > 3)
+                            Text(
+                              '+${bookmark.categories.length - 3}',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                fontSize: 9,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                        ],
                       ],
                     ),
                   ],
                 ),
               ),
 
-              // Chevron
+              // Read / chevron
+              if (onReadTap != null)
+                IconButton(
+                  icon: const Icon(Icons.open_in_browser, size: 20),
+                  onPressed: onReadTap,
+                  color: theme.colorScheme.primary,
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '続きを読む',
+                ),
               Icon(
                 Icons.chevron_right,
                 color: theme.colorScheme.onSurfaceVariant,

@@ -3,15 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/theme.dart';
+import '../../models/bookmark.dart';
+import '../../models/novel.dart';
 import '../../providers/amazon_link_provider.dart';
 import '../../providers/bookmark_provider.dart';
-import '../../providers/charm_tag_provider.dart';
 import '../../providers/novel_provider.dart';
 import '../../providers/stamp_provider.dart';
+import '../../widgets/category_pick_sheet.dart';
 import '../../widgets/rating_stars.dart';
 import '../../widgets/site_badge.dart';
 import '../../widgets/tier_badge.dart';
-import '../stamp/promo_card_screen.dart';
+import '../../widgets/tier_change_sheet.dart';
 import '../stamp/stamp_sheet.dart';
 
 class NovelDetailScreen extends ConsumerStatefulWidget {
@@ -23,16 +25,76 @@ class NovelDetailScreen extends ConsumerStatefulWidget {
   ConsumerState<NovelDetailScreen> createState() => _NovelDetailScreenState();
 }
 
-class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
+class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen>
+    with WidgetsBindingObserver {
+  bool _openedBrowser = false;
+  bool _unreadBannerShown = false;
+  Novel? _currentNovel;
+  Bookmark? _currentBookmark;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _openedBrowser) {
+      _openedBrowser = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _showReadBanner());
+    }
+  }
+
+  void _showReadBanner() {
+    final novel = _currentNovel;
+    final bookmark = _currentBookmark;
+    if (novel == null || bookmark == null || !mounted) return;
+    if (novel.totalEpisodes <= bookmark.lastReadEpisode) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('最新話まで読みましたか？'),
+        duration: const Duration(seconds: 8),
+        action: SnackBarAction(
+          label: '更新',
+          onPressed: () => _updateToLatest(bookmark, novel.totalEpisodes),
+        ),
+      ),
+    );
+  }
+
+  void _updateToLatest(Bookmark bookmark, int newEpisode) {
+    final oldEpisode = bookmark.lastReadEpisode;
+    ref
+        .read(bookmarkListProvider.notifier)
+        .updateLastReadEpisode(bookmark.id, newEpisode);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('既読を第$newEpisode話に更新しました'),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: '元に戻す',
+          onPressed: () => ref
+              .read(bookmarkListProvider.notifier)
+              .updateLastReadEpisode(bookmark.id, oldEpisode),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final novelAsync = ref.watch(novelDetailProvider(widget.novelId));
     final reviewAsync = ref.watch(novelReviewProvider(widget.novelId));
     final bookmarks = ref.watch(bookmarkListProvider);
     final stampsAsync = ref.watch(novelStampsProvider(widget.novelId));
-    final tagsAsync = ref.watch(novelTagsProvider(widget.novelId));
-    final userStampCount = ref.watch(userStampCountProvider);
-    final userTagCount = ref.watch(userTagCountProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -49,9 +111,20 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
               .firstOrNull;
           final review = reviewAsync.valueOrNull;
           final stamps = stampsAsync.valueOrNull ?? [];
-          final tags = tagsAsync.valueOrNull ?? [];
-          final stampCount = userStampCount.valueOrNull ?? 0;
-          final tagCount = userTagCount.valueOrNull ?? 0;
+
+          // Cache for lifecycle callbacks
+          _currentNovel = novel;
+          _currentBookmark = bookmark;
+
+          // Show banner once when entering with unread episodes
+          if (!_unreadBannerShown &&
+              bookmark != null &&
+              bookmark.unreadCount > 0) {
+            _unreadBannerShown = true;
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => _showReadBanner(),
+            );
+          }
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -98,15 +171,46 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
                     const SizedBox(width: 8),
                     Text('全${novel.totalEpisodes}話'),
                     const Spacer(),
-                    // Tier badge
-                    if (bookmark != null && bookmark.tier >= 0) ...[
-                      TierBadge(tier: bookmark.tier, size: 28),
-                      const SizedBox(width: 4),
-                      Text(
-                        DeskTheme.tierLabel(bookmark.tier),
-                        style: Theme.of(context).textTheme.bodySmall,
+                    // Tier badge (tap to change)
+                    if (bookmark != null && bookmark.tier >= 0)
+                      InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () async {
+                          final newTier = await TierChangeSheet.show(
+                            context,
+                            currentTier: bookmark.tier,
+                          );
+                          if (newTier != null) {
+                            ref
+                                .read(bookmarkListProvider.notifier)
+                                .updateTier(bookmark.id, newTier);
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              TierBadge(tier: bookmark.tier, size: 28),
+                              const SizedBox(width: 4),
+                              Text(
+                                DeskTheme.tierLabel(bookmark.tier),
+                                style:
+                                    Theme.of(context).textTheme.bodySmall,
+                              ),
+                              const SizedBox(width: 2),
+                              Icon(
+                                Icons.edit_outlined,
+                                size: 14,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ],
                   ],
                 ),
 
@@ -166,69 +270,6 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
                   const SizedBox(height: 16),
                 ],
 
-                // Tags section
-                if (tags.isNotEmpty) ...[
-                  _SectionTitle(title: '魅力タグ'),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: tags.map((tag) {
-                      return Chip(
-                        label: Text(tag.name,
-                            style: const TextStyle(fontSize: 12)),
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-
-                // Progressive disclosure: suggest tags after 3+ stamps
-                if (stamps.isNotEmpty &&
-                    stamps.length >= 3 &&
-                    stampCount >= 3 &&
-                    tags.isEmpty) ...[
-                  Card(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .primaryContainer
-                        .withValues(alpha: 0.3),
-                    child: ListTile(
-                      leading: const Text('🏷️', style: TextStyle(fontSize: 24)),
-                      title: const Text('魅力タグを付けてみませんか？'),
-                      subtitle: const Text('この作品の魅力を記録しましょう'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {
-                        // Open tag sheet for the latest stamp
-                        // TagSheet.show(context, stampId: stamps.first.id, novelId: widget.novelId);
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-
-                // Promo card button (progressive disclosure: 5+ tags)
-                if (tagCount >= 5 && bookmark != null) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.tonalIcon(
-                      icon: const Text('📣', style: TextStyle(fontSize: 16)),
-                      label: const Text('布教カードを作る'),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                PromoCardScreen(bookmark: bookmark),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
 
                 // Bookmark info (reading progress)
                 if (bookmark != null) ...[
@@ -330,6 +371,102 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
                   const SizedBox(height: 16),
                 ],
 
+                // Genre classification
+                if (bookmark != null) ...[
+                  _SectionTitle(title: '分類'),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      child: SegmentedButton<BookmarkGenre?>(
+                        segments: const [
+                          ButtonSegment(
+                            value: null,
+                            label: Text('未分類'),
+                            icon: Icon(Icons.help_outline, size: 16),
+                          ),
+                          ButtonSegment(
+                            value: BookmarkGenre.original,
+                            label: Text('オリジナル'),
+                            icon: Icon(Icons.auto_stories, size: 16),
+                          ),
+                          ButtonSegment(
+                            value: BookmarkGenre.derivative,
+                            label: Text('二次創作'),
+                            icon: Icon(Icons.people_outline, size: 16),
+                          ),
+                        ],
+                        selected: {bookmark.genre},
+                        onSelectionChanged: (selected) {
+                          final genre = selected.first;
+                          ref
+                              .read(bookmarkListProvider.notifier)
+                              .updateGenre(bookmark.id, genre);
+                        },
+                        emptySelectionAllowed: true,
+                        multiSelectionEnabled: false,
+                        showSelectedIcon: false,
+                        style: const ButtonStyle(
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Category assignment
+                if (bookmark != null) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _SectionTitle(title: 'カテゴリ'),
+                      ),
+                      TextButton.icon(
+                        icon: const Icon(Icons.edit_outlined, size: 16),
+                        label: const Text('編集'),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: () => _showCategorySheet(bookmark),
+                      ),
+                    ],
+                  ),
+                  if (bookmark.categories.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Text(
+                        '未分類',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: bookmark.categories.map((cat) {
+                          return Chip(
+                            avatar: CircleAvatar(
+                              radius: 6,
+                              backgroundColor: cat.colorValue,
+                            ),
+                            label: Text(
+                              cat.name,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                ],
+
                 // Amazon links
                 ...ref
                     .watch(novelAmazonLinksProvider(widget.novelId))
@@ -364,7 +501,11 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
                   child: FilledButton.icon(
                     icon: const Icon(Icons.open_in_browser),
                     label: const Text('サイトで読む'),
-                    onPressed: () => _openUrl(novel.url),
+                    onPressed: () {
+                      final targetUrl = _buildReadUrl(novel, bookmark);
+                      _openedBrowser = true;
+                      _openUrl(targetUrl);
+                    },
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -378,21 +519,37 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
     );
   }
 
+  String _buildReadUrl(Novel novel, Bookmark? bookmark) {
+    if (bookmark != null && bookmark.lastReadEpisode > 0) {
+      return novel.episodeUrl(bookmark.lastReadEpisode);
+    }
+    // For Arcadia, strip act=dump from legacy DB URLs
+    if (novel.site == NovelSite.arcadia) {
+      return novel.url.replaceFirst('act=dump&', '');
+    }
+    return novel.url;
+  }
+
   String _formatDate(DateTime date) {
     return '${date.month}/${date.day}';
   }
 
   Future<void> _openUrl(String url) async {
     final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok) await launchUrl(uri, mode: LaunchMode.platformDefault);
+    } catch (_) {
+      try {
+        await launchUrl(uri, mode: LaunchMode.platformDefault);
+      } catch (_) {}
     }
   }
 
   void _showEpisodeDialog(int bookmarkId, int current, int total) {
     final controller = TextEditingController(text: current.toString());
 
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('既読話数を更新'),
@@ -412,7 +569,8 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
           FilledButton(
             onPressed: () {
               final value = int.tryParse(controller.text);
-              if (value != null && value >= 0 && value <= total) {
+              if (value != null && value >= 0 &&
+                  (total == 0 || value <= total)) {
                 ref
                     .read(bookmarkListProvider.notifier)
                     .updateLastReadEpisode(bookmarkId, value);
@@ -423,79 +581,70 @@ class _NovelDetailScreenState extends ConsumerState<NovelDetailScreen> {
           ),
         ],
       ),
-    );
+    ).then((_) => controller.dispose());
   }
 
   void _showCommentDialog(String? currentComment) {
     final controller = TextEditingController(text: currentComment);
 
-    showDialog(
+    showModalBottomSheet<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('感想を編集'),
-        content: TextField(
-          controller: controller,
-          maxLines: 5,
-          decoration: const InputDecoration(
-            hintText: '感想を入力...',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('キャンセル'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final reviewAsync =
-                  ref.read(novelReviewProvider(widget.novelId));
-              ref.read(registerNovelProvider).upsertReview(
-                    novelId: widget.novelId,
-                    rating: reviewAsync.valueOrNull?.rating,
-                    comment: controller.text,
-                  );
-              ref.invalidate(novelReviewProvider(widget.novelId));
-              Navigator.pop(context);
-            },
-            child: const Text('保存'),
-          ),
-        ],
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => _TextEditSheet(
+        title: '感想を編集',
+        controller: controller,
+        hintText: '感想を入力...',
+        onSave: () {
+          final reviewAsync = ref.read(novelReviewProvider(widget.novelId));
+          ref.read(registerNovelProvider).upsertReview(
+                novelId: widget.novelId,
+                rating: reviewAsync.valueOrNull?.rating,
+                comment: controller.text,
+              );
+          ref.invalidate(novelReviewProvider(widget.novelId));
+          Navigator.pop(ctx);
+        },
       ),
+    ).then((_) => controller.dispose());
+  }
+
+  Future<void> _showCategorySheet(Bookmark bookmark) async {
+    final oldIds = bookmark.categories.map((c) => c.id).toSet();
+    final newIds = await CategoryPickSheet.show(
+      context,
+      initialSelectedIds: oldIds,
+      mode: CategoryPickMode.assign,
     );
+
+    if (newIds == null) return;
+
+    await ref
+        .read(bookmarkListProvider.notifier)
+        .syncCategories(bookmark.id, oldIds, newIds);
   }
 
   void _showMemoDialog(int bookmarkId, String? currentMemo) {
     final controller = TextEditingController(text: currentMemo);
 
-    showDialog(
+    showModalBottomSheet<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('メモを編集'),
-        content: TextField(
-          controller: controller,
-          maxLines: 5,
-          decoration: const InputDecoration(
-            hintText: 'キャラ名、伏線の記録など...',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('キャンセル'),
-          ),
-          FilledButton(
-            onPressed: () {
-              ref
-                  .read(bookmarkListProvider.notifier)
-                  .updateMemo(bookmarkId, controller.text);
-              Navigator.pop(context);
-            },
-            child: const Text('保存'),
-          ),
-        ],
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => _TextEditSheet(
+        title: 'メモを編集',
+        controller: controller,
+        hintText: 'キャラ名、伏線の記録など...',
+        onSave: () {
+          ref
+              .read(bookmarkListProvider.notifier)
+              .updateMemo(bookmarkId, controller.text);
+          Navigator.pop(ctx);
+        },
       ),
-    );
+    ).then((_) => controller.dispose());
   }
+
 }
 
 class _SectionTitle extends StatelessWidget {
@@ -512,6 +661,83 @@ class _SectionTitle extends StatelessWidget {
         style: Theme.of(context).textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.bold,
             ),
+      ),
+    );
+  }
+}
+
+class _TextEditSheet extends StatelessWidget {
+  final String title;
+  final TextEditingController controller;
+  final String hintText;
+  final VoidCallback onSave;
+
+  const _TextEditSheet({
+    required this.title,
+    required this.controller,
+    required this.hintText,
+    required this.onSave,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle bar
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(80),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('キャンセル'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: onSave,
+                  child: const Text('保存'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: TextField(
+              controller: controller,
+              autofocus: true,
+              maxLines: 8,
+              minLines: 4,
+              decoration: InputDecoration(
+                hintText: hintText,
+                border: const OutlineInputBorder(),
+                filled: true,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

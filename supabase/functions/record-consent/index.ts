@@ -57,17 +57,17 @@ serve(async (req) => {
       );
     }
 
-    // Record consent
+    // Record consent (upsert to handle re-consent gracefully)
     const { error: insertError } = await serviceClient
       .from("user_consents")
-      .insert({
+      .upsert({
         user_id: user.id,
         document_type,
         version,
         consented_at: new Date().toISOString(),
         ip_address: req.headers.get("x-forwarded-for") ?? req.headers.get("cf-connecting-ip") ?? null,
         user_agent: req.headers.get("user-agent") ?? null,
-      });
+      }, { onConflict: "user_id,document_type,version" });
 
     if (insertError) throw insertError;
 

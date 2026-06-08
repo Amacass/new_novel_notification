@@ -1,8 +1,10 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../providers/auth_provider.dart';
+import '../legal/legal_screen.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -38,16 +40,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('確認メールを送信しました。メールを確認してください。')),
-        );
-        context.go('/login');
-      }
+      if (!mounted) return;
+      context.go('/home');
     } catch (e) {
       if (mounted) {
+        final msg = e.toString().contains('already registered') ||
+                e.toString().contains('already exists') ||
+                e.toString().contains('user_already_exists') ||
+                e.toString().contains('email_exists')
+            ? 'このメールアドレスは既に登録されています。'
+            : '登録に失敗しました。';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('登録に失敗しました: ${e.toString()}')),
+          SnackBar(content: Text(msg)),
         );
       }
     } finally {
@@ -136,13 +140,51 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     },
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    'アカウントを作成することで、利用規約およびプライバシーポリシーに同意したものとみなされます。',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant,
+                  RichText(
+                    text: TextSpan(
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                      children: [
+                        const TextSpan(text: 'アカウントを作成することで、'),
+                        TextSpan(
+                          text: '利用規約',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            decoration: TextDecoration.underline,
+                          ),
+                          recognizer: TapGestureRecognizer()
+                            ..onTap = () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const LegalScreen(
+                                      title: '利用規約',
+                                      assetPath: 'docs/terms_of_service.md',
+                                    ),
+                                  ),
+                                ),
                         ),
+                        const TextSpan(text: 'および'),
+                        TextSpan(
+                          text: 'プライバシーポリシー',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            decoration: TextDecoration.underline,
+                          ),
+                          recognizer: TapGestureRecognizer()
+                            ..onTap = () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const LegalScreen(
+                                      title: 'プライバシーポリシー',
+                                      assetPath: 'docs/privacy_policy.md',
+                                    ),
+                                  ),
+                                ),
+                        ),
+                        const TextSpan(text: 'に同意したものとみなされます。'),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 24),
                   FilledButton(

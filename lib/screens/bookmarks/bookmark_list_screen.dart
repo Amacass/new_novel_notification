@@ -68,7 +68,7 @@ class _BookmarkListScreenState extends ConsumerState<BookmarkListScreen> {
               final messenger = ScaffoldMessenger.of(this.context);
               try {
                 final service = ref.read(registerNovelProvider);
-                final novel = await service.registerFromUrl(url);
+                final (novel, _) = await service.registerFromUrl(url);
                 if (novel != null) {
                   await ref
                       .read(bookmarkListProvider.notifier)

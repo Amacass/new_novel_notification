@@ -39,8 +39,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (mounted) context.go('/home');
     } catch (e) {
       if (mounted) {
+        final msg = e.toString().contains('invalid_credentials') ||
+                e.toString().contains('Invalid login credentials')
+            ? 'メールアドレス、もしくはパスワードが間違っています。'
+            : 'ログインに失敗しました。';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ログインに失敗しました: ${e.toString()}')),
+          SnackBar(content: Text(msg)),
         );
       }
     } finally {
@@ -68,7 +72,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Web小説通知',
+                    'Novelmark',
                     textAlign: TextAlign.center,
                     style:
                         Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -135,6 +139,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   TextButton(
                     onPressed: () => context.go('/register'),
                     child: const Text('アカウントをお持ちでない方はこちら'),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'パスワードをお忘れの方は\nnovelmark.support@gmail.com までご連絡ください',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                   ),
                 ],
               ),

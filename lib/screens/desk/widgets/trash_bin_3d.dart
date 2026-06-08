@@ -218,33 +218,6 @@ class _TrashBinPainter extends CustomPainter {
       );
     }
 
-    // --- Icon ---
-    final iconPainter = TextPainter(
-      text: const TextSpan(text: '🗑️', style: TextStyle(fontSize: 16)),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    iconPainter.paint(
-      canvas,
-      Offset(cx - iconPainter.width / 2, h * 0.42),
-    );
-
-    // --- Label ---
-    final labelPainter = TextPainter(
-      text: const TextSpan(
-        text: 'ゴミ箱',
-        style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          color: Colors.white70,
-          shadows: [Shadow(color: Colors.black54, blurRadius: 3)],
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    labelPainter.paint(
-      canvas,
-      Offset(cx - labelPainter.width / 2, h * 0.65),
-    );
   }
 
   @override

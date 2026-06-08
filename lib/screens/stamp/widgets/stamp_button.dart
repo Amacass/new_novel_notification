@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 class StampButton extends StatefulWidget {
   final String emoji;
   final String label;
+  final bool isActive;
   final VoidCallback onTap;
 
   const StampButton({
     super.key,
     required this.emoji,
     required this.label,
+    required this.isActive,
     required this.onTap,
   });
 
@@ -40,6 +42,14 @@ class _StampButtonState extends State<StampButton>
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final bg = widget.isActive
+        ? colorScheme.primaryContainer
+        : colorScheme.surfaceContainerHighest;
+    final border = widget.isActive
+        ? Border.all(color: colorScheme.primary, width: 2)
+        : null;
+
     return GestureDetector(
       onTapDown: (_) => _scaleController.reverse(),
       onTapUp: (_) {
@@ -56,8 +66,9 @@ class _StampButtonState extends State<StampButton>
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                color: bg,
                 borderRadius: BorderRadius.circular(16),
+                border: border,
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.1),
@@ -76,7 +87,10 @@ class _StampButtonState extends State<StampButton>
             const SizedBox(height: 4),
             Text(
               widget.label,
-              style: Theme.of(context).textTheme.labelSmall,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: widget.isActive ? colorScheme.primary : null,
+                    fontWeight: widget.isActive ? FontWeight.bold : null,
+                  ),
             ),
           ],
         ),

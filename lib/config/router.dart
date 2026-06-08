@@ -3,9 +3,15 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/auth_provider.dart';
+import '../providers/bookmark_provider.dart';
+import '../providers/charm_tag_provider.dart';
+import '../providers/notification_provider.dart';
+import '../providers/stamp_provider.dart';
+import '../providers/triage_provider.dart';
 import '../screens/splash/splash_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
+import '../screens/timeline/timeline_screen.dart';
 import '../screens/desk/desk_screen.dart';
 import '../screens/bookshelf/bookshelf_screen.dart';
 import '../screens/novel_detail/novel_detail_screen.dart';
@@ -45,6 +51,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state, child) => MainShell(child: child),
         routes: [
           GoRoute(
+            path: '/timeline',
+            builder: (context, state) => const TimelineScreen(),
+          ),
+          GoRoute(
             path: '/home',
             builder: (context, state) => const DeskScreen(),
           ),
@@ -82,6 +92,17 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   // Listen for auth changes and refresh router
   ref.listen(authStateProvider, (prev, next) {
+    if (prev?.value?.user.id != next.value?.user.id) {
+      ref.invalidate(bookmarkListProvider);
+      ref.invalidate(timelineProvider);
+      ref.invalidate(notificationListProvider);
+      ref.invalidate(triageProvider);
+      ref.invalidate(allUserStampsProvider);
+      ref.invalidate(userStampCountProvider);
+      ref.invalidate(novelStampsProvider);
+      ref.invalidate(novelTagsProvider);
+      ref.invalidate(userTagCountProvider);
+    }
     router.refresh();
   });
 
@@ -95,9 +116,9 @@ class MainShell extends StatelessWidget {
 
   static int _calculateSelectedIndex(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
-    if (location.startsWith('/home')) return 0;
-    if (location.startsWith('/bookshelf')) return 1;
-    if (location.startsWith('/authors')) return 2;
+    if (location.startsWith('/timeline')) return 0;
+    if (location.startsWith('/home')) return 1;
+    if (location.startsWith('/bookshelf')) return 2;
     if (location.startsWith('/settings')) return 3;
     return 0;
   }
@@ -111,16 +132,21 @@ class MainShell extends StatelessWidget {
         onDestinationSelected: (index) {
           switch (index) {
             case 0:
-              context.go('/home');
+              context.go('/timeline');
             case 1:
-              context.go('/bookshelf');
+              context.go('/home');
             case 2:
-              context.go('/authors');
+              context.go('/bookshelf');
             case 3:
               context.go('/settings');
           }
         },
         destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.update_outlined),
+            selectedIcon: Icon(Icons.update),
+            label: 'タイムライン',
+          ),
           NavigationDestination(
             icon: Icon(Icons.inbox_outlined),
             selectedIcon: Icon(Icons.inbox),
@@ -130,11 +156,6 @@ class MainShell extends StatelessWidget {
             icon: Icon(Icons.library_books_outlined),
             selectedIcon: Icon(Icons.library_books),
             label: '本棚',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: '作者',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
